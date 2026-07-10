@@ -43,7 +43,7 @@ function getFanoutOffset(index: number, count: number, scale: number) {
     return { x: 0, y: 0 }
   }
 
-  const radius = (count <= 3 ? 22 : count <= 6 ? 30 : 38) / scale
+  const radius = count <= 3 ? 22 : count <= 6 ? 30 : 38 // screen px: markers live in viewport space
   const angleOffset = count === 2 ? Math.PI / 2 : -Math.PI / 2
   const angle = angleOffset + (index / count) * Math.PI * 2
 
@@ -69,6 +69,11 @@ function fromMapPosition([mapX, mapY]: [number, number]): [string, string] {
   const worldY = (mapY * (LANDSCAPE[1] - LANDSCAPE[3])) / 256 + LANDSCAPE[3]
 
   return [worldX.toFixed(2), worldY.toFixed(2)]
+}
+
+function toMapFraction(position: [number, number]) {
+  const [mapX, mapY] = toMapPosition(position)
+  return { fx: mapY / 256, fy: -mapX / 256 }
 }
 
 function toScreenPercent(position: [number, number]) {
@@ -149,6 +154,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
   const pendingViewRef = useRef<{ scale: number; tx: number; ty: number } | null>(null)
   const rafRef = useRef<number | null>(null)
   const settleTimerRef = useRef<number | null>(null)
+  const layoutViewRef = useRef<{ scale: number; tx: number; ty: number } | null>(null)
   const commitView = useCallback((v: { scale: number; tx: number; ty: number }) => {
     pendingViewRef.current = v
     if (rafRef.current == null) {
@@ -160,7 +166,11 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
         // layers on the compositor path ("make sure it's async" — owner 2026-07-10).
         const tf = `translate(${pv.tx}px, ${pv.ty}px) scale(${pv.scale})`
         if (mapPlaneRef.current) mapPlaneRef.current.style.transform = tf
-        if (markerPlaneRef.current) markerPlaneRef.current.style.transform = tf
+        const v0 = layoutViewRef.current
+        if (markerPlaneRef.current && v0) {
+          const k = pv.scale / v0.scale
+          markerPlaneRef.current.style.transform = `translate(${pv.tx - k * v0.tx}px, ${pv.ty - k * v0.ty}px) scale(${k})`
+        }
       })
     }
     // Reconcile React state once the gesture rests (markers/grouping re-render then).
@@ -170,6 +180,24 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
       if (pendingViewRef.current) setView(pendingViewRef.current)
     }, 150)
   }, [])
+
+  // Track the view React last laid markers out with (gesture delta math needs it).
+  useEffect(() => {
+    layoutViewRef.current = view
+  }, [view])
+
+  // Screen-space marker math (owner spec: tags render at fixed rez in viewport space,
+  // never scaled — only the map zooms). ov = at-rest layout view; overlayTransform =
+  // transient gesture delta so tags track the map between React commits.
+  const ov = view ?? {
+    scale: fitScale,
+    tx: (mapSize.width - MAP_BASIS * fitScale) / 2,
+    ty: (mapSize.height - MAP_BASIS * fitScale) / 2,
+  }
+  const gvp = pendingViewRef.current ?? ov
+  const ovK = gvp.scale / ov.scale
+  const overlayTransform = `translate(${gvp.tx - ovK * ov.tx}px, ${gvp.ty - ovK * ov.ty}px) scale(${ovK})`
+
 
   // Initialize on first measure; re-clamp (and keep whole-map minimum) on viewport resize.
   useEffect(() => {
@@ -188,7 +216,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
   const fastTravelMarkers = useMemo(
     () => points.fast_travel.map((point) => ({
       key: `fast-travel-${point[0]}-${point[1]}`,
-      position: toScreenPercent([point[0], point[1]]),
+      frac: toMapFraction([point[0], point[1]]),
     })),
     []
   )
@@ -196,7 +224,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
   const bossTowerMarkers = useMemo(
     () => points.boss_tower.map((point) => ({
       key: `boss-tower-${point[0]}-${point[1]}`,
-      position: toScreenPercent([point[0], point[1]]),
+      frac: toMapFraction([point[0], point[1]]),
     })),
     []
   )
@@ -604,11 +632,9 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
             (owner-diagnosed repaint storm, 2026-07-10) */}
         <div
           ref={markerPlaneRef}
-          className="pointer-events-none absolute left-0 top-0 will-change-transform"
+          className="pointer-events-none absolute inset-0 will-change-transform"
           style={{
-            width: `${MAP_BASIS}px`,
-            height: `${MAP_BASIS}px`,
-            transform: `translate(${(pendingViewRef.current ?? view)?.tx ?? 0}px, ${(pendingViewRef.current ?? view)?.ty ?? 0}px) scale(${(pendingViewRef.current ?? view)?.scale ?? scale})`,
+            transform: overlayTransform,
             transformOrigin: '0 0',
           }}
         >
@@ -619,7 +645,10 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
                 src="/palworld-map/fast_travel.webp"
                 alt=""
                 className="absolute z-20 h-7 w-7 -translate-x-1/2 -translate-y-1/2 select-none object-contain"
-                style={point.position}
+                style={{
+                  left: `${ov.tx + point.frac.fx * MAP_BASIS * ov.scale}px`,
+                  top: `${ov.ty + point.frac.fy * MAP_BASIS * ov.scale}px`,
+                }}
                 draggable={false}
               />
             ))}
@@ -631,7 +660,10 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
                 src="/palworld-map/boss_tower.webp"
                 alt=""
                 className="absolute z-20 h-7 w-7 -translate-x-1/2 -translate-y-1/2 select-none object-contain"
-                style={point.position}
+                style={{
+                  left: `${ov.tx + point.frac.fx * MAP_BASIS * ov.scale}px`,
+                  top: `${ov.ty + point.frac.fy * MAP_BASIS * ov.scale}px`,
+                }}
                 draggable={false}
               />
             ))}
@@ -644,31 +676,31 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
               return (
                 <div key={group.id}>
                   {group.players.map(({ player, x, y }, index) => {
-                    const offset = getFanoutOffset(index, group.players.length, scale)
+                    const offset = getFanoutOffset(index, group.players.length, 1)
 
                     return (
                       <div
                         key={getPlayerKey(player)}
                         className={`pointer-events-auto absolute ${isHovered ? 'z-40' : 'z-30'}`}
-                        style={{ left: `${x}px`, top: `${y}px` }}
+                        style={{ left: `${ov.tx + x * ov.scale}px`, top: `${ov.ty + y * ov.scale}px` }}
                         onMouseEnter={() => setHoveredGroupId(group.id)}
                         onMouseLeave={() => setHoveredGroupId((current) => (current === group.id ? null : current))}
                       >
                         <div
                           className="pointer-events-none absolute left-0 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/45 bg-primary/35 shadow-lg shadow-primary/40"
-                          style={{ transform: `translate(-50%, -50%) scale(${1 / scale})` }}
+                          style={{ transform: 'translate(-50%, -50%)' }}
                         />
                         <img
                           src="/palworld-map/player.webp"
                           alt=""
                           className="absolute left-0 top-0 h-7 w-7 -translate-x-1/2 -translate-y-1/2 select-none object-contain drop-shadow-[0_6px_14px_rgba(15,23,42,0.7)]"
-                          style={{ transform: `translate(-50%, -50%) scale(${1 / scale})` }}
+                          style={{ transform: 'translate(-50%, -50%)' }}
                           draggable={false}
                         />
                         <div
                           className="absolute left-0 top-0"
                           style={{
-                            transform: `translate(${offset.x}px, ${offset.y}px) scale(${1 / scale})`,
+                            transform: `translate(${offset.x}px, ${offset.y}px)`,
                             transformOrigin: 'center bottom',
                           }}
                         >
