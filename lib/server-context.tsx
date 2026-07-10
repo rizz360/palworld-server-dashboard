@@ -8,7 +8,7 @@ type ConnectionStatus = 'disconnected' | 'checking' | 'connected'
 
 const FPS_HISTORY_WINDOW_MS = 30 * 60 * 1000
 const FPS_HISTORY_MAX_SAMPLES = 360
-const METRICS_POLL_INTERVAL_MS = 60 * 1000
+const METRICS_POLL_INTERVAL_MS = 5 * 1000 // owner fix 2026-07-10: 60s starved the FPS graph; 5s matches the 360-sample/30-min buffer design
 const LEGACY_FPS_HISTORY_STORAGE_KEY = 'fpsHistory'
 const DEFAULT_GAME_PORT = '8211'
 const ACTIVE_SESSION_STORAGE_KEY = 'activeServerSession'
@@ -151,7 +151,7 @@ export function useServer() {
 export function ServerProvider({ children }: { children: ReactNode }) {
   const [config, setConfigState] = useState<ServerConfig | null>(null)
   const [players, setPlayersState] = useState<Player[]>([])
-  const [refreshRate, setRefreshRateState] = useState<number>(5)
+  const [refreshRate, setRefreshRateState] = useState<number>(1)
   const [consoleLogs, setConsoleLogs] = useState<ConsoleLog[]>([])
   const [isLoading, setIsLoading] = useState<Record<string, boolean>>({})
   const [isHydrated, setIsHydrated] = useState(false)
@@ -174,7 +174,7 @@ export function ServerProvider({ children }: { children: ReactNode }) {
     const trimmedHistory = trimFpsHistory(storedHistory)
 
     setConfigState(shouldRestoreActiveSession ? storedConfig : null)
-    setRefreshRateState(Number(localStorage.getItem(STORAGE_KEYS.refreshRate)) || 5)
+    setRefreshRateState(Math.min(Number(localStorage.getItem(STORAGE_KEYS.refreshRate)) || 1, 1)) // owner: 1s refresh, clamp stale stored values
     setPlayersState(normalizePlayersPayload(readStorageValue(STORAGE_KEYS.players, [])))
     setServerInfoState(readStorageValue<ServerInfo | null>(STORAGE_KEYS.serverInfo, null))
     setServerMetricsState(readStorageValue<ServerMetrics | null>(STORAGE_KEYS.serverMetrics, null))
@@ -215,7 +215,7 @@ export function ServerProvider({ children }: { children: ReactNode }) {
   const clearConfig = useCallback(() => {
     setConfigState(null)
     setPlayersState([])
-    setRefreshRateState(5)
+    setRefreshRateState(1)
     setConsoleLogs([])
     setIsLoading({})
     setConnectionStatus('disconnected')

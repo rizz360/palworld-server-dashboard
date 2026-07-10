@@ -68,6 +68,14 @@ function getServerConfig(request: NextRequest) {
     ''
   const serverPort = parsePort(serverPortRaw.trim())
 
+  // perlica shim (2026-07-10): panel login password is PANEL_LOGIN_PASSWORD;
+  // the real game admin credential (PALWORLD_REAL_ADMIN_PASSWORD) never leaves
+  // the server side. Real credential entered directly still passes through.
+  const panelLogin = process.env.PANEL_LOGIN_PASSWORD
+  const realAdmin = process.env.PALWORLD_REAL_ADMIN_PASSWORD
+  const effectivePassword =
+    panelLogin && realAdmin && adminPassword === panelLogin ? realAdmin : adminPassword
+
   if (!serverIp.trim() || serverPort == null || !adminPassword) {
     return null
   }
@@ -75,7 +83,7 @@ function getServerConfig(request: NextRequest) {
   return {
     serverIp: serverIp.trim(),
     serverPort,
-    adminPassword,
+    adminPassword: effectivePassword,
   } satisfies ProxyServerConfig
 }
 

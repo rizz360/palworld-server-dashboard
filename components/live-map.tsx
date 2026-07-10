@@ -11,11 +11,12 @@ import { useServer } from '@/lib/server-context'
 import type { Player } from '@/lib/types'
 import points from '@/lib/map-points.json'
 
-const LANDSCAPE = [447900, 708920, -999940, -738920] as const
-const MAP_IMAGE_URL = '/palworld-map/full-map-z4.png'
+const LANDSCAPE = [447900, 810900, -1151900, -788900] as const // 1.0 canvas ~11% larger; measured fit ±2%, exact bounds via pak DT_WorldMapUI = phase 2
+const MAP_IMAGE_URL = '/palworld-map/full-map-1.0-8192.avif' // 1.0 map w/ Sunreach, paldb map8 z4 stitch, AVIF 2x2 grid (2026-07-10)
 const MIN_ZOOM = 0
 const MAX_ZOOM = 10
 const MAP_SIZE_FALLBACK = 920
+const MAP_BASIS = 8192 // native image layout: GPU layer caches full-res once; zoom = pure scale (owner spec 2026-07-10)
 const REFRESH_INTERVAL_MS = 5_000
 
 interface PlayerMarkerGroup {
@@ -119,7 +120,7 @@ export function LiveMap() {
   const mapPlaneRef = useRef<HTMLDivElement | null>(null)
   const nextAutoRefreshAtRef = useRef<number | null>(null)
 
-  const scale = 1 + zoom * 0.45
+  const scale = (mapSize.width / MAP_BASIS) * (1 + zoom * 0.9) // fit at zoom 0 → ~1.1x native at max
   const mappablePlayers = useMemo(
     () => players.filter((player) => player.location_x !== 0 || player.location_y !== 0),
     [players]
@@ -317,7 +318,7 @@ export function LiveMap() {
     const thresholdPx = shouldUngroup ? 0 : (38 * (1 - zoom / 6)) / scale
     const positionedPlayers = mappablePlayers.map((player) => ({
       player,
-      ...toScreenPixels([player.location_x, player.location_y], mapSize.width, mapSize.height),
+      ...toScreenPixels([player.location_x, player.location_y], MAP_BASIS, MAP_BASIS),
     }))
     const visited = new Set<number>()
     const groups: PlayerMarkerGroup[] = []
@@ -484,8 +485,10 @@ export function LiveMap() {
           >
             <div
               ref={mapPlaneRef}
-              className="absolute left-1/2 top-1/2 h-full w-full will-change-transform"
+              className="absolute left-1/2 top-1/2 will-change-transform"
               style={{
+                width: `${MAP_BASIS}px`,
+                height: `${MAP_BASIS}px`,
                 transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
                 transformOrigin: 'center center',
               }}
