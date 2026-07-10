@@ -821,16 +821,16 @@ export function MetricsCard() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <MetricTile
-          label="Players"
-          value={serverMetrics ? `${players.length}/${serverMetrics.maxplayernum}` : `${players.length}`}
-        />
-        <MetricTile
           label="Frame Time"
           value={serverMetrics ? `${(serverMetrics.serverframetime ?? 0).toFixed(2)}ms` : 'N/A'}
         />
         <MetricTile label="Uptime" value={uptime} />
         <MetricTile label="World Day" value={serverMetrics?.days != null ? `${serverMetrics.days}` : 'N/A'} />
         <MetricTile label="Bases" value={serverMetrics?.basecampnum != null ? `${serverMetrics.basecampnum}` : 'N/A'} />
+        <MetricTile
+          label="Players"
+          value={serverMetrics ? `${players.length}/${serverMetrics.maxplayernum}` : `${players.length}`}
+        />
       </div>
     </PanelSection>
   )
