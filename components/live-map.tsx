@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LayersIcon, RefreshCwIcon } from 'lucide-react'
+import { LayersIcon, MapIcon, RefreshCwIcon, TreePineIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -17,9 +17,15 @@ import { useServer } from '@/lib/server-context'
 import type { Player } from '@/lib/types'
 import points from '@/lib/map-points.json'
 
-const LANDSCAPE = [349400, 724400, -1099400, -724400] as const // DT-exact: DT_WorldMapUIData MainMap landScapeRealPositionMax/Min (pak v1.0) — pairs ONLY with the pak-native T_WorldMap image below
-const MAP_IMAGE_AVIF = '/palworld-map/full-map-native-8192.avif' // primary — best quality (q85 grid)
-const MAP_IMAGE_URL = '/palworld-map/full-map-native-8192.webp' // fallback (q92) for Firefox, which can't render grid AVIF
+// [maxX, maxY, minX, minY] — DT_WorldMapUIData landScapeRealPositionMax/Min tuple shape (pak v1.0).
+// Each bounds tuple pairs ONLY with its matching pak-native image below.
+type MapBounds = readonly [number, number, number, number]
+const WORLD_LANDSCAPE: MapBounds = [349400, 724400, -1099400, -724400] // DT-exact: MainMap
+const TREE_LANDSCAPE: MapBounds = [689148.5, -476400.0, 347351.5, -818197.0] // DT-exact: World Tree sub-map
+const MAP_IMAGE_AVIF = '/palworld-map/full-map-native-8192.avif' // world — primary, best quality (q85 grid)
+const MAP_IMAGE_URL = '/palworld-map/full-map-native-8192.webp' // world — fallback (q92) for Firefox, which can't render grid AVIF
+const MAP_IMAGE_TREE_AVIF = '/palworld-map/full-map-tree-8192.avif' // tree — primary AVIF
+const MAP_IMAGE_TREE_URL = '/palworld-map/full-map-tree-8192.webp' // tree — WebP fallback
 const MIN_ZOOM = 0
 const MAX_ZOOM = 10
 const MAP_SIZE_FALLBACK = 920
@@ -54,31 +60,31 @@ function getFanoutOffset(index: number, count: number, scale: number) {
   }
 }
 
-function toMapPosition([worldX, worldY]: [number, number]): [number, number] {
+function toMapPosition([worldX, worldY]: [number, number], bounds: MapBounds): [number, number] {
   if (worldX >= -256 && worldX <= 256) {
     return [worldX, worldY]
   }
 
-  const x = -256 + (256 * (worldX - LANDSCAPE[2])) / (LANDSCAPE[0] - LANDSCAPE[2])
-  const y = (256 * (worldY - LANDSCAPE[3])) / (LANDSCAPE[1] - LANDSCAPE[3])
+  const x = -256 + (256 * (worldX - bounds[2])) / (bounds[0] - bounds[2])
+  const y = (256 * (worldY - bounds[3])) / (bounds[1] - bounds[3])
 
   return [x, y]
 }
 
-function fromMapPosition([mapX, mapY]: [number, number]): [string, string] {
-  const worldX = ((mapX + 256) * (LANDSCAPE[0] - LANDSCAPE[2])) / 256 + LANDSCAPE[2]
-  const worldY = (mapY * (LANDSCAPE[1] - LANDSCAPE[3])) / 256 + LANDSCAPE[3]
+function fromMapPosition([mapX, mapY]: [number, number], bounds: MapBounds): [string, string] {
+  const worldX = ((mapX + 256) * (bounds[0] - bounds[2])) / 256 + bounds[2]
+  const worldY = (mapY * (bounds[1] - bounds[3])) / 256 + bounds[3]
 
   return [worldX.toFixed(2), worldY.toFixed(2)]
 }
 
-function toMapFraction(position: [number, number]) {
-  const [mapX, mapY] = toMapPosition(position)
+function toMapFraction(position: [number, number], bounds: MapBounds) {
+  const [mapX, mapY] = toMapPosition(position, bounds)
   return { fx: mapY / 256, fy: -mapX / 256 }
 }
 
-function toScreenPercent(position: [number, number]) {
-  const [mapX, mapY] = toMapPosition(position)
+function toScreenPercent(position: [number, number], bounds: MapBounds) {
+  const [mapX, mapY] = toMapPosition(position, bounds)
 
   return {
     left: `${(mapY / 256) * 100}%`,
@@ -86,8 +92,8 @@ function toScreenPercent(position: [number, number]) {
   }
 }
 
-function toScreenPixels(position: [number, number], width: number, height: number) {
-  const [mapX, mapY] = toMapPosition(position)
+function toScreenPixels(position: [number, number], width: number, height: number, bounds: MapBounds) {
+  const [mapX, mapY] = toMapPosition(position, bounds)
 
   return {
     x: (mapY / 256) * width,
@@ -123,6 +129,16 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
   const setShowPlayers = persistLayer('players', setShowPlayersRaw)
   const setShowBossTowers = persistLayer('bossTowers', setShowBossTowersRaw)
   const setShowFastTravels = persistLayer('fastTravels', setShowFastTravelsRaw)
+  // Map canvas: main World (default) <-> World Tree sub-map. Persists like the layer toggles.
+  const [mapMode, setMapModeRaw] = useState<'world' | 'tree'>(() => {
+    if (typeof window === 'undefined') return 'world'
+    return localStorage.getItem('mapMode') === 'tree' ? 'tree' : 'world'
+  })
+  // Active projection bounds + image swap follow the mode. World bounds === the pre-existing
+  // LANDSCAPE, so world mode is byte-for-byte the old behavior.
+  const activeBounds = mapMode === 'tree' ? TREE_LANDSCAPE : WORLD_LANDSCAPE
+  const mapImageAvif = mapMode === 'tree' ? MAP_IMAGE_TREE_AVIF : MAP_IMAGE_AVIF
+  const mapImageUrl = mapMode === 'tree' ? MAP_IMAGE_TREE_URL : MAP_IMAGE_URL
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshCountdownMs, setRefreshCountdownMs] = useState(REFRESH_INTERVAL_MS)
   const [mapImageLoaded, setMapImageLoaded] = useState(false)
@@ -209,6 +225,18 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
       return clampView({ ...cur, scale: Math.max(cur.scale, fit) }, mapSize.width, mapSize.height)
     })
   }, [mapSize.width, mapSize.height, clampView])
+
+  // Switch canvases and re-fit. Both maps are 8192², but a mode change resets the view so the
+  // user lands at the fit view of the new canvas — reusing the same fit math as the init effect
+  // above (clear any in-flight gesture first so the imperative path doesn't fight the reset).
+  const switchMapMode = useCallback((mode: 'world' | 'tree') => {
+    if (mode === mapMode) return
+    setMapModeRaw(mode)
+    if (typeof window !== 'undefined') localStorage.setItem('mapMode', mode)
+    pendingViewRef.current = null
+    const fit = Math.min(mapSize.width, mapSize.height) / MAP_BASIS
+    setView(Number.isFinite(fit) && fit > 0 ? clampView({ scale: fit, tx: 0, ty: 0 }, mapSize.width, mapSize.height) : null)
+  }, [mapMode, mapSize.width, mapSize.height, clampView])
   const mappablePlayers = useMemo(
     () => players.filter((player) => player.location_x !== 0 || player.location_y !== 0),
     [players]
@@ -217,17 +245,17 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
   const fastTravelMarkers = useMemo(
     () => points.fast_travel.map((point) => ({
       key: `fast-travel-${point[0]}-${point[1]}`,
-      frac: toMapFraction([point[0], point[1]]),
+      frac: toMapFraction([point[0], point[1]], activeBounds),
     })),
-    []
+    [activeBounds]
   )
 
   const bossTowerMarkers = useMemo(
     () => points.boss_tower.map((point) => ({
       key: `boss-tower-${point[0]}-${point[1]}`,
-      frac: toMapFraction([point[0], point[1]]),
+      frac: toMapFraction([point[0], point[1]], activeBounds),
     })),
-    []
+    [activeBounds]
   )
 
   const refreshPlayers = useCallback(async () => {
@@ -384,9 +412,9 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
     const mapX = -topRatio * 256
     const mapY = leftRatio * 256
 
-    const next = fromMapPosition([mapX, mapY])
+    const next = fromMapPosition([mapX, mapY], activeBounds)
     setMousePosition((cur) => (cur[0] === next[0] && cur[1] === next[1] ? cur : next))
-  }, [])
+  }, [activeBounds])
 
   const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -427,7 +455,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
     const thresholdPx = shouldUngroup ? 0 : (38 * (1 - zoom / 6)) / groupScale
     const positionedPlayers = mappablePlayers.map((player) => ({
       player,
-      ...toScreenPixels([player.location_x, player.location_y], MAP_BASIS, MAP_BASIS),
+      ...toScreenPixels([player.location_x, player.location_y], MAP_BASIS, MAP_BASIS, activeBounds),
     }))
     const visited = new Set<number>()
     const groups: PlayerMarkerGroup[] = []
@@ -479,7 +507,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
     }
 
     return groups
-  }, [mappablePlayers, zoom, fitScale])
+  }, [mappablePlayers, zoom, fitScale, activeBounds])
 
   const refreshLabel = useMemo(() => {
     if (!config) {
@@ -543,6 +571,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
                 checked={showFastTravels}
                 onCheckedChange={setShowFastTravels}
                 onSelect={(event) => event.preventDefault()}
+                disabled={mapMode === 'tree'}
               >
                 Fast Travel
               </DropdownMenuCheckboxItem>
@@ -550,6 +579,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
                 checked={showBossTowers}
                 onCheckedChange={setShowBossTowers}
                 onSelect={(event) => event.preventDefault()}
+                disabled={mapMode === 'tree'}
               >
                 Boss Towers
               </DropdownMenuCheckboxItem>
@@ -562,6 +592,35 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
               </DropdownMenuCheckboxItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <div className="flex h-10 items-center gap-0.5 rounded-md border border-border/60 bg-muted/20 p-0.5">
+            <button
+              type="button"
+              onClick={() => switchMapMode('world')}
+              aria-pressed={mapMode === 'world'}
+              className={`flex h-full items-center gap-1.5 rounded border px-3 font-mono text-[11px] uppercase tracking-[0.2em] transition-colors ${
+                mapMode === 'world'
+                  ? 'border-primary/60 bg-primary/10 text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <MapIcon className="h-3.5 w-3.5" />
+              World
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMapMode('tree')}
+              aria-pressed={mapMode === 'tree'}
+              className={`flex h-full items-center gap-1.5 rounded border px-3 font-mono text-[11px] uppercase tracking-[0.2em] transition-colors ${
+                mapMode === 'tree'
+                  ? 'border-primary/60 bg-primary/10 text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <TreePineIcon className="h-3.5 w-3.5" />
+              Tree
+            </button>
+          </div>
 
           <div className="flex h-10 items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-3">
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Cursor</span>
@@ -609,10 +668,10 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
           }}
         >
           <picture>
-            <source srcSet={MAP_IMAGE_AVIF} type="image/avif" />
+            <source srcSet={mapImageAvif} type="image/avif" />
             <img
-              src={MAP_IMAGE_URL}
-              alt="Palworld world map"
+              src={mapImageUrl}
+              alt={mapMode === 'tree' ? 'Palworld World Tree map' : 'Palworld world map'}
               className="block h-full w-full select-none object-cover"
               draggable={false}
               onLoad={() => {
@@ -642,7 +701,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
             transformOrigin: '0 0',
           }}
         >
-          {showFastTravels &&
+          {showFastTravels && mapMode === 'world' &&
             fastTravelMarkers.map((point) => (
               <img
                 key={point.key}
@@ -657,7 +716,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
               />
             ))}
 
-          {showBossTowers &&
+          {showBossTowers && mapMode === 'world' &&
             bossTowerMarkers.map((point) => (
               <img
                 key={point.key}
@@ -744,7 +803,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
             <div className="max-w-md rounded-2xl border border-destructive/35 bg-card/90 p-5 text-center text-foreground shadow-2xl">
               <div className="text-lg font-semibold">Map image failed to load</div>
               <p className="mt-2 text-sm text-muted-foreground">
-                The app could not load <code className="font-mono text-destructive">{MAP_IMAGE_URL}</code>.
+                The app could not load <code className="font-mono text-destructive">{mapImageUrl}</code>.
               </p>
             </div>
           </div>

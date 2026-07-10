@@ -634,9 +634,6 @@ function FpsHistoryGraph({
     () => [...chartSamples].sort((a, b) => a.timestamp - b.timestamp),
     [chartSamples]
   )
-  const sampleSpanMs = orderedSamples.length > 1
-    ? orderedSamples[orderedSamples.length - 1].timestamp - orderedSamples[0].timestamp
-    : 0
 
   const pointString = React.useMemo(() => {
     if (orderedSamples.length === 0) {
@@ -644,16 +641,14 @@ function FpsHistoryGraph({
     }
 
     const { width, height } = chartSize
-    const firstTimestamp = orderedSamples[0]?.timestamp ?? 0
-    const lastTimestamp = orderedSamples[orderedSamples.length - 1]?.timestamp ?? firstTimestamp
-    const timestampSpan = Math.max(lastTimestamp - firstTimestamp, 1)
+    // Plot against the FIXED window [now-4h, now] so the line sits at its true
+    // temporal position (right edge = now); the chart shows a real 4h axis even
+    // before the buffer fills, instead of stretching whatever data exists to full width.
     const yPadding = height * 0.06
 
     return orderedSamples
       .map((sample) => {
-        const x = orderedSamples.length === 1
-          ? width / 2
-          : ((sample.timestamp - firstTimestamp) / timestampSpan) * width
+        const x = ((sample.timestamp - cutoffTimestamp) / FPS_HISTORY_WINDOW_MS) * width
         const normalizedY = (sample.fps - axisMin) / axisRange
         const y = height - normalizedY * height
         const clampedX = Math.min(Math.max(x, 0), width)
@@ -661,7 +656,7 @@ function FpsHistoryGraph({
         return `${clampedX.toFixed(1)},${clampedY.toFixed(1)}`
       })
       .join(' ')
-  }, [axisMin, axisRange, chartSize, orderedSamples])
+  }, [axisMin, axisRange, chartSize, orderedSamples, cutoffTimestamp])
 
   return (
     <div className="space-y-4">
@@ -758,8 +753,8 @@ function FpsHistoryGraph({
         </div>
 
         <div className="mt-3 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-          <span>{sampleSpanMs > 0 ? formatAxisAge(sampleSpanMs) : '-4h'}</span>
-          <span>{sampleSpanMs > 0 ? formatAxisAge(sampleSpanMs / 2) : '-2h'}</span>
+          <span>{formatAxisAge(FPS_HISTORY_WINDOW_MS)}</span>
+          <span>{formatAxisAge(FPS_HISTORY_WINDOW_MS / 2)}</span>
           <span>Now</span>
         </div>
       </div>
