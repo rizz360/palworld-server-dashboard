@@ -101,9 +101,22 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
   const [zoom, setZoom] = useState(0)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [mousePosition, setMousePosition] = useState<[string, string]>(['0.00', '0.00'])
-  const [showPlayers, setShowPlayers] = useState(true)
-  const [showBossTowers, setShowBossTowers] = useState(false)
-  const [showFastTravels, setShowFastTravels] = useState(false)
+  // Layer toggles persist across reloads (owner order 2026-07-10)
+  const readLayer = (key: string, fallback: boolean) => {
+    if (typeof window === 'undefined') return fallback
+    const v = localStorage.getItem(`mapLayer.${key}`)
+    return v === null ? fallback : v === '1'
+  }
+  const persistLayer = (key: string, setter: (v: boolean) => void) => (v: boolean) => {
+    setter(v)
+    localStorage.setItem(`mapLayer.${key}`, v ? '1' : '0')
+  }
+  const [showPlayers, setShowPlayersRaw] = useState(() => readLayer('players', true))
+  const [showBossTowers, setShowBossTowersRaw] = useState(() => readLayer('bossTowers', false))
+  const [showFastTravels, setShowFastTravelsRaw] = useState(() => readLayer('fastTravels', false))
+  const setShowPlayers = persistLayer('players', setShowPlayersRaw)
+  const setShowBossTowers = persistLayer('bossTowers', setShowBossTowersRaw)
+  const setShowFastTravels = persistLayer('fastTravels', setShowFastTravelsRaw)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshCountdownMs, setRefreshCountdownMs] = useState(REFRESH_INTERVAL_MS)
   const [mapImageLoaded, setMapImageLoaded] = useState(false)
