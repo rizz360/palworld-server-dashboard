@@ -49,7 +49,7 @@ export function ConsolePanel() {
   }))
 
   return (
-    <div className="border-t border-border/50 bg-card/20 p-3 sm:p-4">
+    <div className="flex h-full flex-col rounded border border-border/50 bg-card/50 p-3 backdrop-blur-sm sm:p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.24em]">
           Console Feed ({consoleLogs.length})

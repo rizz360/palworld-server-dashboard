@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
-import { DataCard } from '@/components/data-card'
 import { InfoPanel } from '@/components/status-bar'
 import { useServer } from '@/lib/server-context'
 import { Badge } from '@/components/ui/badge'
@@ -23,15 +22,10 @@ import {
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import {
-  ServerIcon,
-  UsersIcon,
   MegaphoneIcon,
   SaveIcon,
   PowerIcon,
   StopCircleIcon,
-  ShieldIcon,
-  ActivityIcon,
-  SettingsIcon,
   SearchIcon
 } from 'lucide-react'
 
@@ -58,27 +52,6 @@ function PanelSection({
     </InfoPanel>
   )
 }
-
-export function ServerInfoCard() {
-  const { serverInfo } = useServer()
-
-  return (
-    <DataCard
-      title="Server Info"
-      subtitle="Intel Feed"
-      status={serverInfo ? 'active' : 'inactive'}
-      fields={[
-        { label: 'Name', value: serverInfo?.servername ?? 'Unavailable', highlight: true },
-        { label: 'Version', value: serverInfo?.version ?? 'N/A' },
-        { label: 'Description', value: serverInfo?.description || 'No description' },
-        { label: 'World GUID', value: serverInfo?.worldguid ?? 'Unknown' },
-      ]}
-      className="h-full"
-    />
-  )
-}
-
-
 
 interface PresetMessage {
   label: string
@@ -733,89 +706,51 @@ function FpsHistoryGraph({
   )
 }
 
+function MetricTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border/50 bg-secondary/35 px-3 py-2">
+      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
+      <div className="mt-1 font-mono text-sm text-foreground">{value}</div>
+    </div>
+  )
+}
+
 export function MetricsCard() {
-  const { serverMetrics, fpsHistory, nextMetricsFetchAt, metricsPollIntervalMs } = useServer()
-  const [now, setNow] = useState(Date.now())
+  // Player count sources from the roster (players.length) — the same truth the
+  // roster panel renders — NOT metrics.currentplayernum (owner order 2026-07-10).
+  const { serverMetrics, fpsHistory, players, metricsPollIntervalMs } = useServer()
 
-  useEffect(() => {
-    setNow(Date.now())
-
-    if (!nextMetricsFetchAt) {
-      return
-    }
-
-    const interval = window.setInterval(() => {
-      setNow(Date.now())
-    }, 500)
-
-    return () => window.clearInterval(interval)
-  }, [nextMetricsFetchAt])
-
-  const nextFetchRemainingMs = nextMetricsFetchAt != null
-    ? Math.max(0, nextMetricsFetchAt - now)
-    : null
-
-  const formatCountdown = (ms: number) => {
-    const totalSeconds = Math.max(0, Math.ceil(ms / 1000))
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`
-  }
+  const uptime = serverMetrics
+    ? (() => {
+        const u = serverMetrics.uptime || 0
+        const h = Math.floor(u / 3600)
+        const m = Math.floor((u % 3600) / 60)
+        return h > 0 ? `${h}h ${m}m` : `${m}m`
+      })()
+    : 'N/A'
 
   return (
     <PanelSection
       title="Metrics"
       subtitle="Live Performance"
       status={serverMetrics ? 'active' : 'pending'}
-      className="min-h-[22rem]"
+      className="min-h-0"
     >
-      <div className="rounded-lg border border-border/50 bg-secondary/35 px-3 py-2">
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Next Metrics Fetch</div>
-        <div className="mt-1 flex items-center justify-between gap-3">
-          <span className="font-mono text-sm text-primary">
-            {nextFetchRemainingMs != null ? formatCountdown(nextFetchRemainingMs) : 'N/A'}
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-            Every {Math.floor(metricsPollIntervalMs / 1000)}s
-          </span>
-        </div>
-      </div>
-
       <FpsHistoryGraph samples={fpsHistory} currentFps={serverMetrics?.serverfps ?? null} />
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-lg border border-border/50 bg-secondary/35 px-3 py-2">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Players</div>
-          <div className="mt-1 font-mono text-sm text-foreground">
-            {serverMetrics ? `${serverMetrics.currentplayernum}/${serverMetrics.maxplayernum}` : 'N/A'}
-          </div>
-        </div>
-        <div className="rounded-lg border border-border/50 bg-secondary/35 px-3 py-2">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Frame Time</div>
-          <div className="mt-1 font-mono text-sm text-foreground">
-            {serverMetrics ? `${(serverMetrics.serverframetime ?? 0).toFixed(2)}ms` : 'N/A'}
-          </div>
-        </div>
-        <div className="rounded-lg border border-border/50 bg-secondary/35 px-3 py-2">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Uptime</div>
-          <div className="mt-1 font-mono text-sm text-foreground">
-            {serverMetrics
-              ? (() => {
-                  const u = serverMetrics.uptime || 0
-                  const h = Math.floor(u / 3600)
-                  const m = Math.floor((u % 3600) / 60)
-                  return h > 0 ? `${h}h ${m}m` : `${m}m`
-                })()
-              : 'N/A'}
-          </div>
-        </div>
-        <div className="rounded-lg border border-border/50 bg-secondary/35 px-3 py-2">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">World Day</div>
-          <div className="mt-1 font-mono text-sm text-foreground">
-            {serverMetrics?.days != null ? `${serverMetrics.days}` : 'N/A'}
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <MetricTile
+          label="Players"
+          value={serverMetrics ? `${players.length}/${serverMetrics.maxplayernum}` : `${players.length}`}
+        />
+        <MetricTile
+          label="Frame Time"
+          value={serverMetrics ? `${(serverMetrics.serverframetime ?? 0).toFixed(2)}ms` : 'N/A'}
+        />
+        <MetricTile label="Uptime" value={uptime} />
+        <MetricTile label="World Day" value={serverMetrics?.days != null ? `${serverMetrics.days}` : 'N/A'} />
+        <MetricTile label="Bases" value={serverMetrics?.basecampnum != null ? `${serverMetrics.basecampnum}` : 'N/A'} />
+        <MetricTile label="Polling" value={`Metrics · every ${Math.floor(metricsPollIntervalMs / 1000)}s`} />
       </div>
     </PanelSection>
   )
@@ -912,7 +847,7 @@ function ColoredJson({ data, highlightQuery = '' }: { data: Record<string, unkno
 }
 
 export function SettingsCard() {
-  const { settings } = useServer()
+  const { settings, serverInfo } = useServer()
   const [searchQuery, setSearchQuery] = useState('')
   const jsonContainerRef = useRef<HTMLDivElement | null>(null)
   const normalizedQuery = searchQuery.trim().toLowerCase()
@@ -959,6 +894,20 @@ export function SettingsCard() {
       status={settings ? 'complete' : 'active'}
       contentClassName="flex min-h-0 flex-1 flex-col"
     >
+        <div className="space-y-2">
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Description</div>
+            <div className="mt-0.5 break-words font-mono text-sm text-foreground">
+              {serverInfo?.description || 'No description'}
+            </div>
+          </div>
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">World GUID</div>
+            <div className="mt-0.5 break-all font-mono text-sm text-foreground">
+              {serverInfo?.worldguid ?? 'Unknown'}
+            </div>
+          </div>
+        </div>
         {settings && (
           <div className="space-y-1.5">
             <FieldLabel htmlFor="settings-search">Search Settings</FieldLabel>

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { InfoPanel } from '@/components/status-bar'
 import { useServer } from '@/lib/server-context'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -309,14 +308,9 @@ export function OnlinePlayersPanel() {
   return (
     <aside className="flex h-full w-80 min-h-0">
       <InfoPanel title="Online Players" subtitle="Personnel Ledger" status="active" className="flex h-full min-h-0 w-full flex-col">
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <UsersIcon className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold text-foreground">Roster</h2>
-          </div>
-          <Badge variant="secondary" className="px-2 py-1">
-            {players.length}
-          </Badge>
+        <div className="mb-4 flex items-center gap-2">
+          <UsersIcon className="w-4 h-4 text-primary" />
+          <h2 className="font-semibold text-foreground">Roster</h2>
         </div>
 
         <div className="space-y-3">
