@@ -132,7 +132,8 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
 
   const fitScale = Math.min(mapSize.width, mapSize.height) / MAP_BASIS
   const scale = view?.scale ?? fitScale
-  const zoom = Math.max(0, (scale / fitScale - 1) / 0.9) // derived from scale: keeps grouping/fanout semantics
+  const zoomExact = Math.max(0, (scale / fitScale - 1) / 0.9)
+  const zoom = Math.round(zoomExact * 2) / 2 // quantized: grouping/fanout recompute at half-steps, not per wheel tick
   const clampView = useCallback((v: { scale: number; tx: number; ty: number }, vw: number, vh: number) => {
     const w = MAP_BASIS * v.scale
     const h = MAP_BASIS * v.scale
@@ -140,6 +141,19 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
       scale: v.scale,
       tx: w <= vw ? (vw - w) / 2 : clamp(v.tx, vw - w, 0),
       ty: h <= vh ? (vh - h) / 2 : clamp(v.ty, vh - h, 0),
+    }
+  }, [])
+
+  // rAF-coalesce rapid view updates (wheel/drag): many events per frame -> one state commit.
+  const pendingViewRef = useRef<{ scale: number; tx: number; ty: number } | null>(null)
+  const rafRef = useRef<number | null>(null)
+  const commitView = useCallback((v: { scale: number; tx: number; ty: number }) => {
+    pendingViewRef.current = v
+    if (rafRef.current == null) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null
+        if (pendingViewRef.current) setView(pendingViewRef.current)
+      })
     }
   }, [])
 
@@ -285,19 +299,20 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
       }
 
       const rect = mapViewportRef.current?.getBoundingClientRect()
-      setView((cur) =>
-        cur && rect
-          ? clampView(
-              {
-                scale: cur.scale,
-                tx: start.panX + (event.clientX - start.x),
-                ty: start.panY + (event.clientY - start.y),
-              },
-              rect.width,
-              rect.height,
-            )
-          : cur,
-      )
+      const cur = pendingViewRef.current ?? view
+      if (cur && rect) {
+        commitView(
+          clampView(
+            {
+              scale: cur.scale,
+              tx: start.panX + (event.clientX - start.x),
+              ty: start.panY + (event.clientY - start.y),
+            },
+            rect.width,
+            rect.height,
+          ),
+        )
+      }
     }
 
     const handleMouseUp = () => {
@@ -312,7 +327,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isDragging, clampView])
+  }, [isDragging, clampView, commitView, view])
 
   const handleMapMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const planeRect = mapPlaneRef.current?.getBoundingClientRect()
@@ -335,15 +350,13 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
     if (!rect) return
     const cx = event.clientX - rect.left
     const cy = event.clientY - rect.top
-    setView((cur) => {
-      const fit = Math.min(rect.width, rect.height) / MAP_BASIS
-      const base = cur ?? { scale: fit, tx: (rect.width - MAP_BASIS * fit) / 2, ty: (rect.height - MAP_BASIS * fit) / 2 }
-      const nextScale = clamp(base.scale * (event.deltaY < 0 ? 1.25 : 0.8), fit, 1.2)
-      const k = nextScale / base.scale
-      // anchor the point under the cursor: it must map to the same viewport position after scaling
-      return clampView({ scale: nextScale, tx: cx - (cx - base.tx) * k, ty: cy - (cy - base.ty) * k }, rect.width, rect.height)
-    })
-  }, [clampView])
+    const fit = Math.min(rect.width, rect.height) / MAP_BASIS
+    const base = pendingViewRef.current ?? view ?? { scale: fit, tx: (rect.width - MAP_BASIS * fit) / 2, ty: (rect.height - MAP_BASIS * fit) / 2 }
+    const nextScale = clamp(base.scale * (event.deltaY < 0 ? 1.25 : 0.8), fit, 1.2)
+    const k = nextScale / base.scale
+    // anchor the point under the cursor: it must map to the same viewport position after scaling
+    commitView(clampView({ scale: nextScale, tx: cx - (cx - base.tx) * k, ty: cy - (cy - base.ty) * k }, rect.width, rect.height))
+  }, [clampView, commitView, view])
 
   const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 0) {
@@ -545,7 +558,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
       >
         <div
           ref={mapPlaneRef}
-          className="absolute left-0 top-0 will-change-transform"
+          className="absolute left-0 top-0"
           style={{
             width: `${MAP_BASIS}px`,
             height: `${MAP_BASIS}px`,
