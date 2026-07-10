@@ -585,7 +585,21 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
           <div className="pointer-events-none absolute left-3 top-3 z-30 rounded-full border border-primary/45 bg-primary/15 px-3 py-1 text-xs font-semibold tracking-[0.2em] text-primary">
             MAP V4
           </div>
+        </div>
 
+        {/* Marker overlay: parallel layer with identical transform — keeps the image
+            layer's raster UNTOUCHED by 1s marker updates and zoom counter-scaling
+            (owner-diagnosed repaint storm, 2026-07-10) */}
+        <div
+          className="pointer-events-none absolute left-0 top-0 will-change-transform"
+          style={{
+            width: `${MAP_BASIS}px`,
+            height: `${MAP_BASIS}px`,
+            transform: `translate(${view?.tx ?? 0}px, ${view?.ty ?? 0}px) scale(${scale})`,
+            transformOrigin: '0 0',
+            transition: isDragging ? 'none' : 'transform 90ms cubic-bezier(0.2, 0, 0.2, 1)',
+          }}
+        >
           {showFastTravels &&
             fastTravelMarkers.map((point) => (
               <img
@@ -623,7 +637,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
                     return (
                       <div
                         key={getPlayerKey(player)}
-                        className={`absolute ${isHovered ? 'z-40' : 'z-30'}`}
+                        className={`pointer-events-auto absolute ${isHovered ? 'z-40' : 'z-30'}`}
                         style={{ left: `${x}px`, top: `${y}px` }}
                         onMouseEnter={() => setHoveredGroupId(group.id)}
                         onMouseLeave={() => setHoveredGroupId((current) => (current === group.id ? null : current))}
