@@ -18,7 +18,8 @@ import type { Player } from '@/lib/types'
 import points from '@/lib/map-points.json'
 
 const LANDSCAPE = [349400, 724400, -1099400, -724400] as const // DT-exact: DT_WorldMapUIData MainMap landScapeRealPositionMax/Min (pak v1.0) — pairs ONLY with the pak-native T_WorldMap image below
-const MAP_IMAGE_URL = '/palworld-map/full-map-native-8192.webp' // WebP for universal browser support incl. Firefox (grid-AVIF failed to render in FF); 3.0MB, same size as the AVIF. AVIF kept on disk as fallback.
+const MAP_IMAGE_AVIF = '/palworld-map/full-map-native-8192.avif' // primary — best quality (q85 grid)
+const MAP_IMAGE_URL = '/palworld-map/full-map-native-8192.webp' // fallback (q92) for Firefox, which can't render grid AVIF
 const MIN_ZOOM = 0
 const MAX_ZOOM = 10
 const MAP_SIZE_FALLBACK = 920
@@ -607,20 +608,23 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
             transformOrigin: '0 0',
           }}
         >
-          <img
-            src={MAP_IMAGE_URL}
-            alt="Palworld world map"
-            className="block h-full w-full select-none object-cover"
-            draggable={false}
-            onLoad={() => {
-              setMapImageLoaded(true)
-              setMapImageError(false)
-            }}
-            onError={() => {
-              setMapImageLoaded(false)
-              setMapImageError(true)
-            }}
-          />
+          <picture>
+            <source srcSet={MAP_IMAGE_AVIF} type="image/avif" />
+            <img
+              src={MAP_IMAGE_URL}
+              alt="Palworld world map"
+              className="block h-full w-full select-none object-cover"
+              draggable={false}
+              onLoad={() => {
+                setMapImageLoaded(true)
+                setMapImageError(false)
+              }}
+              onError={() => {
+                setMapImageLoaded(false)
+                setMapImageError(true)
+              }}
+            />
+          </picture>
 
           <div className="pointer-events-none absolute left-3 top-3 z-30 rounded-full border border-primary/45 bg-primary/15 px-3 py-1 text-xs font-semibold tracking-[0.2em] text-primary">
             MAP V4
