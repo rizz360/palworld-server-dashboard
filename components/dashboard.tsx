@@ -5,6 +5,7 @@ import { DashboardHeader } from '@/components/dashboard-header'
 import { OnlinePlayersPanel } from '@/components/online-players-panel'
 import { MobilePlayersSheet } from '@/components/mobile-players-sheet'
 import { ConsolePanel } from '@/components/console-panel'
+import { ChatPanel } from '@/components/chat-panel'
 import { HUDCornerFrame } from '@/components/hud-corner-frame'
 import { LiveMap } from '@/components/live-map'
 import { StatusBar } from '@/components/status-bar'
@@ -79,13 +80,14 @@ export function Dashboard() {
                         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                           <AnnouncementCard />
                           <ServerManagementCard />
-                          <BanManagementCard />
+                          <ChatPanel />
                         </div>
 
-                        {/* Configuration + console */}
-                        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                        {/* Configuration + console + sanctions */}
+                        <div className="mt-4 grid gap-4 xl:grid-cols-3">
                           <SettingsCard />
                           <ConsolePanel />
+                          <BanManagementCard />
                         </div>
                       </div>
                     </ScrollArea>

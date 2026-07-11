@@ -1,14 +1,14 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { InfoPanel } from '@/components/status-bar'
 import { useServer } from '@/lib/server-context'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { FieldGroup, Field, FieldLabel } from '@/components/ui/field'
+import { FieldLabel } from '@/components/ui/field'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +22,6 @@ import {
 import { Spinner } from '@/components/ui/spinner'
 import { toast } from 'sonner'
 import {
-  MegaphoneIcon,
   SaveIcon,
   PowerIcon,
   StopCircleIcon,
@@ -31,7 +30,7 @@ import {
 
 const FPS_HISTORY_WINDOW_MS = 4 * 60 * 60 * 1000
 
-function PanelSection({
+export function PanelSection({
   title,
   subtitle,
   status = 'active',
@@ -140,24 +139,76 @@ const QUICK_MESSAGE_GROUPS: { label: string; presets: PresetMessage[] }[] = [
   },
 ]
 
+// Hover/focus popover previewing the exact message a quick-send button fires.
+// Portalled to <body> so it escapes the card's `overflow-hidden` clipping; no
+// external tooltip dependency, and it works for mouse hover and keyboard focus.
+function QuickSendButton({
+  preset,
+  disabled,
+  onSend,
+}: {
+  preset: PresetMessage
+  disabled?: boolean
+  onSend: (preset: PresetMessage) => void
+}) {
+  const triggerRef = useRef<HTMLSpanElement | null>(null)
+  const [tipPos, setTipPos] = useState<{ left: number; top: number } | null>(null)
+
+  const showTip = () => {
+    const el = triggerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    setTipPos({ left: rect.left + rect.width / 2, top: rect.top })
+  }
+  const hideTip = () => setTipPos(null)
+
+  return (
+    <span
+      ref={triggerRef}
+      className="inline-flex"
+      onMouseEnter={showTip}
+      onMouseLeave={hideTip}
+      onFocus={showTip}
+      onBlur={hideTip}
+    >
+      <Button
+        onClick={() => onSend(preset)}
+        disabled={disabled}
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-label={`Send announcement: ${preset.message}`}
+        className={cn(
+          'h-auto whitespace-normal px-2 py-1 text-left text-xs',
+          getQuickMessageToneClass(preset)
+        )}
+      >
+        {preset.label}
+      </Button>
+      {tipPos &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            role="tooltip"
+            style={{ left: tipPos.left, top: tipPos.top }}
+            className="pointer-events-none fixed z-[120] -mt-2 w-max max-w-[20rem] -translate-x-1/2 -translate-y-full rounded border border-border bg-card/95 px-2.5 py-1.5 font-mono text-[11px] leading-snug text-foreground shadow-xl backdrop-blur-sm"
+          >
+            {preset.message}
+          </div>,
+          document.body
+        )}
+    </span>
+  )
+}
+
 export function AnnouncementCard() {
   const { apiCall, isLoading } = useServer()
-  const [message, setMessage] = useState('')
+  const sending = !!isLoading['announce']
 
-  const sendMessage = async (text: string) => {
-    await apiCall('announce', 'POST', { message: text })
-  }
-
-  const sendAnnouncement = async (preset?: PresetMessage) => {
-    const text = preset ? preset.message : message
-    if (!text.trim()) {
-      toast.error('Please enter a message')
-      return
-    }
+  const sendPreset = async (preset: PresetMessage) => {
     try {
-      await sendMessage(text)
+      await apiCall('announce', 'POST', { message: preset.message })
       toast.success('Announcement sent')
-      if (!preset) setMessage('')
     } catch {
       toast.error('Failed to send announcement')
     }
@@ -167,6 +218,9 @@ export function AnnouncementCard() {
     <PanelSection title="Announcements" subtitle="Broadcast Channel" status="active">
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground">Quick Messages</p>
+          <p className="text-[11px] leading-relaxed text-muted-foreground/80">
+            Click to broadcast instantly. Hover a button to preview the exact message.
+          </p>
           <div className="space-y-2.5">
             {QUICK_MESSAGE_GROUPS.map((group) => (
               <div key={group.label} className="space-y-1">
@@ -175,46 +229,18 @@ export function AnnouncementCard() {
                 </p>
                 <div className="flex flex-wrap gap-1.5">
                   {group.presets.map((preset) => (
-                    <Button
+                    <QuickSendButton
                       key={preset.label}
-                      onClick={() => setMessage(preset.message)}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        "h-auto whitespace-normal px-2 py-1 text-left text-xs",
-                        getQuickMessageToneClass(preset)
-                      )}
-                    >
-                      {preset.label}
-                    </Button>
+                      preset={preset}
+                      disabled={sending}
+                      onSend={sendPreset}
+                    />
                   ))}
                 </div>
               </div>
             ))}
           </div>
         </div>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="announcement">Message</FieldLabel>
-            <Textarea
-              id="announcement"
-              placeholder="Enter your announcement..."
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              className="bg-input border-border resize-none"
-              rows={3}
-            />
-          </Field>
-        </FieldGroup>
-        <Button
-          onClick={() => sendAnnouncement()}
-          disabled={isLoading['announce']}
-          className="w-full bg-chart-2 text-background hover:bg-chart-2/90"
-        >
-          {isLoading['announce'] ? <Spinner className="w-4 h-4 mr-2" /> : <MegaphoneIcon className="w-4 h-4 mr-2" />}
-          Send Announcement
-        </Button>
     </PanelSection>
   )
 }
