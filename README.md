@@ -1,31 +1,20 @@
 # Palworld Server Dashboard
 
-Palworld Server Dashboard is a browser-based admin panel for managing a Palworld dedicated server through its REST API.
+A self-hosted web dashboard for operating a Palworld dedicated server through the Palworld REST API.
 
-It gives you one place to handle the jobs you do most often:
+Use it to monitor server health, view players, manage moderation actions, send announcements, inspect FPS history, and access a live map from a browser.
 
-- checking whether the server is healthy
-- watching live player activity
-- sending announcements
-- kicking, banning, and unbanning players
-- viewing live map positions
-- monitoring FPS, uptime, and other server metrics
+## Links
 
-Built with Next.js, designed for self-hosting, and meant to feel much friendlier than working with raw API calls.
+- **Live demo:** https://palworld-server-dashboard.vercel.app/
+- **Documentation:** https://palworld-server-dashboard.vercel.app/docs
+- **Container image:** `ghcr.io/rnz01/palworld-server-dashboard:latest`
 
-## Live Demo 🌐
+## Demo
 
-[Open the live demo](https://palworld-server-dashboard.vercel.app/)
+The live demo uses mock Palworld REST API data, so you can click around without affecting a real server.
 
-Demo password:
-
-```text
-demo
-```
-
-The demo uses mock Palworld REST API data, so you can click around without affecting a real server.
-
-## Preview 🖼️
+## Preview
 
 Sensitive data in the dashboard screenshot below has been blurred.
 
@@ -33,7 +22,7 @@ Sensitive data in the dashboard screenshot below has been blurred.
 
 ![Palworld Server Dashboard screenshot with sensitive data blurred](public/readme/dashboard-preview-redacted.png)
 
-### Login Screen
+### Login
 
 ![Palworld Server Dashboard login screen](public/readme/login-preview.png)
 
@@ -41,532 +30,95 @@ Sensitive data in the dashboard screenshot below has been blurred.
 
 ![Palworld Server Dashboard live map screen](public/readme/live-map-preview.png)
 
-## Table of Contents
+## Features
 
-- [Live Demo](#live-demo-)
-- [Project Status](#project-status-)
-- [Overview](#overview-)
-- [Features](#features-)
-- [How It Works](#how-it-works-)
-- [Requirements](#requirements-)
-- [Quick Start](#quick-start-)
-- [Docker Quick Start](#docker-quick-start-)
-- [Server-Side FPS History](#server-side-fps-history-)
-- [First Connection Walkthrough](#first-connection-walkthrough-)
-- [Available Scripts](#available-scripts-)
-- [Development Notes](#development-notes-)
-- [Production and Deployment](#production-and-deployment-)
-- [Security Notes](#security-notes-)
-- [Project Structure](#project-structure-)
-- [UI Library and Styling](#ui-library-and-styling-)
-- [Troubleshooting](#troubleshooting-)
-- [Contributing](#contributing-)
-- [Tech Stack](#tech-stack-)
-- [License](#license-)
+- Server status, uptime, FPS, frame time, player count, and world metrics
+- Rolling server-side FPS history
+- Online player roster with kick, ban, and unban actions
+- Admin announcements and common server-operation controls
+- Live map with player positions and optional map markers
+- Admin and limited moderator access tiers
+- Docker Compose deployment with FPS sampler sidecar
+- Built-in documentation powered by Nextra
 
-## Project Status ⚠️
+## Quick Start
 
-This is a hobby project that was largely vibe-coded and shared in good faith, so expect rough edges, bugs, missing safeguards, and breaking changes over time.
-
-Please treat it as a self-hosted community tool, not a guaranteed production platform. You are responsible for reviewing, testing, securing, and operating your own deployment.
-
-## Overview 🎮
-
-Running a game server usually means doing a lot of repetitive operational work:
-
-- checking if the server is online
-- seeing who is connected
-- warning players before maintenance
-- saving the world before a restart
-- watching performance when the server is under load
-
-This dashboard brings those tasks together into a single control surface with a more approachable UI.
-
-## Features ✨
-
-### Dashboard Overview
-
-The main dashboard gives you a quick read on the current state of the server, including:
-
-- connection status
-- online player count
-- uptime
-- server information
-- world settings
-- recent in-app console activity
-
-### Player Management
-
-You can manage players directly from the UI:
-
-- view online players
-- search by name or user ID
-- kick players
-- ban players
-- unban players
-
-### Server Operations
-
-The control cards let you handle common admin actions:
-
-- send custom announcements
-- use quick preset messages
-- save the world
-- schedule restart warnings
-- shut down the server
-- force stop the server
-
-### Metrics and Monitoring
-
-The metrics panel helps you keep an eye on performance:
-
-- live FPS with a general-health verdict pill (composite score across all FPS
-  signals — weighted blend plus veto floors so one critical signal alone can
-  drag the verdict; hover it for the full breakdown)
-- FPS history graph fed by a server-side sampler — populated for the full
-  window even while the panel is closed, with honest gaps for downtime
-  (see [Server-Side FPS History](#server-side-fps-history-))
-- health tiles: Min / Avg / Max plus Median (the structural plateau),
-  Longest <45 (worst continuous dip), and Under 30 (share of the window
-  below 30 FPS)
-- frame time
-- uptime
-- player capacity
-- world day
-
-### Live Map
-
-The map view shows:
-
-- player positions
-- optional fast travel markers
-- optional boss tower markers
-- zoom and pan controls
-- grouped player markers when players are close together
-
-### Visual Customization
-
-The dashboard includes multiple built-in visual themes, so server admins can choose the look they prefer without changing the code.
-
-## How It Works 🔌
-
-The browser never talks to the Palworld REST API directly.
-
-Instead, the frontend sends requests to a local Next.js API route, and that route forwards the request to your Palworld server. This gives the project a few practical benefits:
-
-- the admin password is not placed in URL query strings
-- browser code stays simpler
-- requests can be normalized before forwarding them
-
-The app also stores some state in the browser, such as recent server data and optional saved connection details.
-
-## Requirements 📋
-
-You will need:
-
-- Node.js `20.9.0` or newer
-- npm `10` or newer
-- a Palworld server with the REST API enabled
-- the admin password for that server
-
-Before starting, make sure you know:
-
-- `Server IP or URL`
-- `REST API port`
-- `Game port`
-- `Admin password`
-
-Typical defaults used by the UI are:
-
-- `REST API port`: `8212`
-- `Game port`: `8211`
-
-The exact server-side setup depends on how your Palworld server is hosted. If you are using a hosted panel, Docker image, or custom server setup, check that provider's instructions for enabling the REST API.
-
-## Quick Start 🚀
-
-Clone the project, install dependencies, and start the development server:
+### Docker Compose
 
 ```bash
-git clone <your-fork-or-repo-url>
-cd palworld-server-dashboard
-npm install
-npm run dev
-```
+cp .env.example .env
+# edit .env
 
-Then open:
-
-```text
-http://localhost:3000
-```
-
-If you are developing from another device on your local network, the dev server also exposes a network URL when started.
-
-## Docker Quick Start 🐳
-
-If you just want to run the dashboard, you can pull the published container image instead of building from source.
-
-Before using the commands below, install Docker first:
-
-- Docker Desktop is the easiest recommended option because it includes Docker Engine and Docker Compose on Windows, macOS, and Linux
-- if you are on Linux and already manage Docker yourself, Docker Engine plus the Docker Compose plugin also works
-
-Official install docs:
-
-- [Docker Desktop](https://docs.docker.com/desktop/)
-- [Docker Compose](https://docs.docker.com/compose/install/)
-- [Docker Engine](https://docs.docker.com/engine/install/)
-
-### Pull the Image
-
-```bash
-docker pull ghcr.io/rnz01/palworld-server-dashboard:latest
-```
-
-### Run the Image
-
-```bash
-docker run -d \
-  --name palworld-server-dashboard \
-  --restart unless-stopped \
-  -p 3000:3000 \
-  ghcr.io/rnz01/palworld-server-dashboard:latest
-```
-
-Then open:
-
-```text
-http://localhost:3000
-```
-
-### Run with Docker Compose
-
-This repository includes a ready-to-use [docker-compose.yml](./docker-compose.yml) that pulls the published image by default.
-
-```bash
 docker compose pull
 docker compose up -d
 ```
 
-Optional overrides:
-
-- `PALWORLD_SERVER_DASHBOARD_IMAGE` to point at a different tag or registry
-- `PALWORLD_SERVER_DASHBOARD_PORT` to change the host port
-
-## Server-Side FPS History 📈
-
-The FPS histogram is fed by a small **server-side sampler**, not by the browser.
-A stdlib-only Python script (`scripts/fps-sampler/palworld-fps-sampler.py`)
-polls the game's `/v1/api/metrics` endpoint (default: every 5 s) and maintains a
-rolling ring file covering the last hour. The panel reads that ring through its
-own authenticated API and simply displays it.
-
-Why it works this way:
-
-- **Always populated** — the full window of history is there the moment you open
-  the panel, even if nobody had it open. Browser tabs (hidden-tab timer
-  throttling, closed panels) can no longer thin out or lose history.
-- **Honest gaps** — if the game server (or the sampler) is down, nothing is
-  recorded and the chart shows a gap instead of a made-up bridging line. The
-  health verdict pill reports `No Data` / `Stale` / `Calibrating` instead of
-  guessing.
-- **Cheap** — one request every 5 s against the local REST API, atomic file
-  writes, a few dozen kilobytes of state.
-
-**Docker Compose:** nothing to do — `docker-compose.yml` runs the sampler as a
-`python:3.12-alpine` sidecar sharing a metrics volume with the panel.
-
-**Bare metal:** copy the script somewhere permanent, point it at your server
-with `PALWORLD_REST_URL` / `PALWORLD_ADMIN_PASSWORD`, and keep it running —
-`scripts/fps-sampler/palworld-fps-sampler.service.example` is a hardened
-systemd unit template with setup steps in its header. Set
-`PALWORLD_FPS_HISTORY_FILE` for the panel to the same path the sampler writes.
-
-Sampler configuration (all optional):
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `PALWORLD_REST_URL` | `http://127.0.0.1:8212` | Game REST API base URL |
-| `PALWORLD_ADMIN_PASSWORD` | — (required) | Game REST admin password |
-| `FPS_HISTORY_FILE` | `/run/palworld-metrics/fps-history.json` | Ring file path |
-| `FPS_SAMPLE_SECONDS` | `5` | Poll cadence (1-60) |
-| `FPS_WINDOW_MINUTES` | `60` | History window (5-1440) |
-
-Without a running sampler the panel still works — the FPS graph and health
-tiles just report no data.
-
-## First Connection Walkthrough 🧭
-
-When you open the app, you will see the login/connect screen.
-
-Fill in the fields like this:
-
-### Server IP or URL
-
-This is the host where your Palworld server can be reached.
-
-Examples:
-
-- `192.168.1.50`
-- `play.example.com`
-- `http://192.168.1.50`
-
-### REST API Port
-
-This is the Palworld REST API port, not the public gameplay port.
-
-Default:
+Open:
 
 ```text
-8212
+http://localhost:3000
 ```
 
-### Game Port
-
-This is the gameplay port your server uses.
-
-Default:
-
-```text
-8211
-```
-
-The dashboard stores this as part of the server profile so the UI can show the full server connection details.
-
-### Admin Password
-
-This is the password used to authenticate against the Palworld REST API.
-
-### Remember Me
-
-If enabled, the app stores the connection details in browser local storage on that machine so you do not need to re-enter them every time.
-
-## Available Scripts 🛠️
-
-### `npm run dev`
-
-Starts the Next.js development server.
-
-### `npm run typecheck`
-
-Generates Next.js route types and runs the TypeScript checker.
-
-### `npm run build`
-
-Creates a production build.
-
-### `npm run start`
-
-Starts the production server from a built app.
-
-### `npm run check`
-
-Runs the full local verification flow:
-
-- typecheck
-- production build
-
-## Development Notes 💻
-
-### Local Network Access
-
-This project is configured to allow development access from the machine's active local IPv4 addresses. That helps when you want to open the app from a LAN address instead of only `localhost`.
-
-### Type Generation
-
-The typecheck script clears `.next` before regenerating route types. This avoids stale generated files causing false TypeScript errors after route changes.
-
-## Production and Deployment 🌐
-
-To create a production build:
+### Local Development
 
 ```bash
-npm run build
-npm run start
-```
-
-The project uses Next.js standalone output, which makes self-hosting easier and is a good starting point for:
-
-- VPS deployments
-- internal dashboards
-- containerized deployments
-- reverse-proxy setups
-
-### Container Image
-
-The production container image is published to:
-
-```text
-ghcr.io/rnz01/palworld-server-dashboard:latest
-```
-
-The image is built from the included [Dockerfile](./Dockerfile) and runs the Next.js standalone server on port `3000`.
-
-### Automatic Image Publishing
-
-The repository includes a GitHub Actions workflow at [.github/workflows/publish-docker-image.yml](./.github/workflows/publish-docker-image.yml).
-
-On every push to `main`, the workflow:
-
-- builds the Docker image
-- publishes it to GitHub Container Registry
-- updates the `latest` tag
-- publishes a commit-specific `sha-<commit>` tag
-
-If this is the first time the package is published, verify the package visibility in GitHub Packages and set it to public if needed.
-
-This app is best treated as an internal admin tool, not a public-facing website.
-
-Recommended deployment patterns:
-
-- private home lab or LAN
-- VPN-only access
-- reverse proxy with authentication
-- internal server management network
-
-## Security Notes 🔐
-
-This project handles server admin access, so a few things are important.
-
-### Good News
-
-- the admin password is proxied through Next.js API routes
-- the password is not sent in URL query strings
-- the app does not require a separate database
-
-### Important Tradeoff
-
-If `Remember me` is enabled, the server IP, ports, and admin password are stored in browser local storage on that machine.
-
-That means:
-
-- it is convenient for trusted personal devices
-- it is a bad idea on shared or public machines
-
-### Recommended Practice
-
-If you plan to deploy this for regular use:
-
-- put it behind authentication
-- keep it on a trusted network
-- use HTTPS if exposed beyond your LAN
-- avoid sharing browser profiles that have saved credentials
-
-### Use at Your Own Risk
-
-This project is provided as-is, without warranty or liability.
-
-By using it, you accept responsibility for common self-hosting risks such as:
-
-- misconfiguration
-- downtime
-- broken updates
-- security exposure
-- credential leakage on your own devices
-- data loss or world-state issues
-- moderation mistakes or unintended server actions
-
-## Project Structure 🗂️
-
-This is a quick guide to the main folders:
-
-```text
-app/          Next.js app routes, layout, providers, API routes
-components/   UI components and dashboard panels
-lib/          shared helpers, state, types, and Palworld request utilities
-public/       static assets such as icons and map images
-```
-
-Some especially useful files:
-
-- `app/api/palworld/[...path]/route.ts` - proxy route to the Palworld REST API
-- `lib/server-context.tsx` - app-wide server/session state
-- `lib/palworld.ts` - Palworld API helpers and payload normalization
-- `components/dashboard.tsx` - main dashboard shell
-- `components/live-map.tsx` - live map view
-- `Dockerfile` - production container build
-- `docker-compose.yml` - ready-to-run container deployment using the published image
-- `.github/workflows/publish-docker-image.yml` - container build and publish automation
-
-## UI Library and Styling 🎨
-
-This project does not use a large all-in-one UI framework like MUI, Ant Design, or Chakra UI.
-
-Instead, the UI is built with a lighter custom stack:
-
-- Tailwind CSS for styling and layout
-- Radix UI primitives for accessible low-level UI behavior
-- custom reusable components inside `components/` and `components/ui/`
-- a visual style and component direction influenced by `thegridcn`
-- Sonner for toast notifications
-
-In practice, that means the visual design is mostly custom and shaped by the `thegridcn` aesthetic, while accessibility and interaction behavior for dialogs, dropdowns, tabs, switches, and sheets are powered by Radix UI primitives.
-
-## Troubleshooting 🧯
-
-### The app opens, but it cannot connect to my server
-
-Check:
-
-- server IP or hostname
-- REST API port
-- admin password
-- firewall rules
-- whether the REST API is actually enabled on the server
-
-### The gameplay server works, but the dashboard cannot connect
-
-That usually means the game port is reachable but the REST API is not. Double-check the REST API port and its authentication settings.
-
-### The page loads, but development hot reload is not working
-
-Restart the dev server with:
-
-```bash
+npm install
+cp .env.example .env
 npm run dev
 ```
 
-If you are using a LAN URL, make sure you are opening the same machine's active network address and not an outdated one.
+Open:
 
-### TypeScript complains about generated route files
-
-Run:
-
-```bash
-npm run typecheck
+```text
+http://localhost:3000
 ```
 
-The script already resets and regenerates the route types for you.
+## Required Configuration
 
-## Contributing 🤝
+At minimum, configure:
 
-Contributions are welcome.
+```env
+PANEL_INITIAL_ADMIN_PASSWORD=replace-with-a-panel-password
+PALWORLD_ADMIN_PASSWORD=replace-with-real-palworld-admin-password
+PALWORLD_REST_URL=http://127.0.0.1:8212
+```
 
-Good ways to contribute:
+For Docker, if Palworld runs on the host machine, use:
 
-- fix bugs
-- improve the UI
-- improve server compatibility
-- improve the documentation
-- add tests
-- suggest deployment improvements
+```env
+PALWORLD_REST_URL=http://host.docker.internal:8212
+```
 
-If you open an issue or pull request, it helps to include:
+See the full configuration guide in the docs:
 
-- what you expected
-- what actually happened
-- steps to reproduce the problem
-- screenshots or logs when relevant
+https://palworld-server-dashboard.vercel.app/docs/configuration/environment-variables
 
-## Tech Stack 🧰
+## Scripts
 
-- Next.js
-- React
-- TypeScript
-- Tailwind CSS
-- Radix UI primitives
-- Sonner
+```bash
+npm run dev        # start development server
+npm run build      # production build + docs search index
+npm run start      # start production server
+npm run typecheck  # route typegen + TypeScript check
+npm run check      # typecheck + build
+```
 
-## License 📄
+## Security Notice
+
+This is an admin tool for a game server. Do not expose it publicly without additional protection such as VPN, reverse-proxy authentication, SSO, or IP allowlisting.
+
+The browser logs in with a panel password. The real Palworld REST admin password is kept server-side and injected only by the dashboard proxy.
+
+Read the security guide before production use:
+
+https://palworld-server-dashboard.vercel.app/docs/security
+
+## Documentation
+
+The docs cover installation, configuration, authentication, moderator access, deployment, operations, troubleshooting, and development:
+
+https://palworld-server-dashboard.vercel.app/docs
+
+## License
 
 MIT. See [LICENSE](./LICENSE).

@@ -1,0 +1,42 @@
+---
+title: Live Chat
+---
+
+# Live Chat
+
+The dashboard can show recent chat and join/leave events when the Palworld server logs are available through systemd journal.
+
+## How chat reading works
+
+Palworld REST does not provide a chat-read endpoint. The dashboard reads recent lines from:
+
+```bash
+journalctl -u PALWORLD_SYSTEMD_UNIT -o cat --since -3h --no-pager
+```
+
+Default unit:
+
+```env
+PALWORLD_SYSTEMD_UNIT=palworld
+```
+
+## Requirements
+
+- Linux host with systemd.
+- Palworld server logs written to journald.
+- Dashboard process user allowed to read the journal.
+- Usually membership in the `systemd-journal` group.
+
+## Behavior when unavailable
+
+If journal access fails, the endpoint returns an empty event list. The rest of the dashboard continues to work.
+
+## Sending announcements
+
+Announcements use the Palworld REST API and do not require journal access.
+
+Customize the sender prefix with:
+
+```env
+NEXT_PUBLIC_CHAT_SENDER_PREFIX="[Admin] "
+```

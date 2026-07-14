@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import 'nextra-theme-docs/style.css'
 import './globals.css'
 import { AppProviders } from './providers'
 import { CircuitBackground } from '@/components/circuit-background'

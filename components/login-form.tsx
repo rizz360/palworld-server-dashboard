@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { FieldGroup, Field, FieldLabel } from '@/components/ui/field'
 import { buildPalworldProxyHeaders, buildPalworldProxyPath } from '@/lib/palworld'
+import { demoConfig, DEMO_MODE } from '@/lib/demo'
 import { LOGIN_TRANSITION_SESSION_KEY } from '@/lib/session-keys'
 import { InfoPanel, StatusBar } from '@/components/status-bar'
 import { Terminal } from '@/components/terminal'
@@ -24,8 +25,6 @@ const VALIDATION_REQUEST_TIMEOUT_MS = 5_000
 const PINNED_SERVER_IP = '127.0.0.1'
 const PINNED_REST_API_PORT = '8212'
 const PINNED_GAME_PORT = '8211'
-const IS_DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === '1'
-const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || 'demo'
 
 type ValidationState = 'idle' | 'checking' | 'valid' | 'invalid'
 
@@ -139,6 +138,7 @@ export function LoginForm() {
   const [adminPassword, setAdminPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(true)
   const [isConnecting, setIsConnecting] = useState(false)
+  const [isDemoMode, setIsDemoMode] = useState(DEMO_MODE)
   const [error, setError] = useState('')
   const [validationState, setValidationState] = useState<ValidationState>('idle')
   const [validationMessage, setValidationMessage] = useState('')
@@ -207,6 +207,13 @@ export function LoginForm() {
   )
 
   useEffect(() => {
+    void fetch('/api/demo-mode', { cache: 'no-store' })
+      .then((response) => response.json() as Promise<{ enabled?: boolean }>)
+      .then((data) => setIsDemoMode(Boolean(data.enabled)))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
     const storedConfigRaw = localStorage.getItem(SERVER_CONFIG_STORAGE_KEY)
     if (!storedConfigRaw) {
       return
@@ -256,6 +263,13 @@ export function LoginForm() {
       restApiPort: PINNED_REST_API_PORT,
       gamePort: PINNED_GAME_PORT,
       adminPassword,
+    }
+
+    if (isDemoMode) {
+      sessionStorage.setItem(LOGIN_TRANSITION_SESSION_KEY, '1')
+      setConfig(demoConfig, { rememberMe: false })
+      setIsConnecting(false)
+      return
     }
 
     if (!normalizedConfig.adminPassword) {
@@ -323,9 +337,7 @@ export function LoginForm() {
                 <div className="login-avatar-spark" />
               </div>
               <p className="mt-4 max-w-md text-sm text-muted-foreground">
-                {IS_DEMO_MODE
-                  ? <>Demo password: <span className="font-mono text-foreground">{DEMO_PASSWORD}</span></>
-                  : 'Enter your operator password to bring the control grid online.'}
+                {isDemoMode ? 'Demo mode is enabled. Launch the sample dashboard without a server password.' : 'Enter your operator password to bring the control grid online.'}
               </p>
             </div>
 
@@ -341,10 +353,11 @@ export function LoginForm() {
                         name="adminPassword"
                         type="password"
                         autoComplete="current-password"
-                        placeholder="Enter your password"
+                        placeholder={isDemoMode ? 'Not required in demo mode' : 'Enter your password'}
                         value={adminPassword}
                         onChange={(e) => setAdminPassword(e.target.value)}
-                        required
+                        required={!isDemoMode}
+                        disabled={isDemoMode}
                         className={`pl-10 ${inputValidationClass}`}
                       />
                     </div>
@@ -412,6 +425,8 @@ export function LoginForm() {
                       <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
                       Connecting...
                     </>
+                  ) : isDemoMode ? (
+                    'Launch Demo'
                   ) : (
                     'Connect to Server'
                   )}

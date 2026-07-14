@@ -1,0 +1,46 @@
+---
+title: Requirements
+---
+
+# Requirements
+
+## Dashboard host
+
+You need one of these runtime options:
+
+- Docker and Docker Compose, recommended for most installs.
+- Node.js `20.9.0` or newer with npm.
+- A platform capable of running a Next.js standalone server.
+
+## Palworld server
+
+Your Palworld dedicated server must have the REST API enabled and reachable from the dashboard host.
+
+Typical ports:
+
+| Port | Purpose |
+| --- | --- |
+| `8211` | Palworld game traffic |
+| `8212` | Palworld REST API |
+
+The dashboard needs the REST API port, not only the gameplay port.
+
+## Information to collect
+
+Before installing, collect:
+
+- Palworld REST API URL, for example `http://192.168.1.50:8212`.
+- Real Palworld REST admin password.
+- Desired panel admin password.
+- Optional panel moderator password.
+- Host port where the dashboard should be exposed, default `3000`.
+
+## Network checklist
+
+From the dashboard host, the Palworld REST API must be reachable:
+
+```bash
+curl http://YOUR_SERVER:8212/v1/api/info
+```
+
+A `401 Unauthorized` response is fine at this stage; it means the REST endpoint is reachable but needs authentication. Connection refused, timeout, or DNS errors mean the dashboard will not be able to connect either.

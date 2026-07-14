@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input'
 import { PlayerRoster } from '@/components/player-roster'
 import { normalizePlayersPayload } from '@/lib/palworld'
 import { cn } from '@/lib/utils'
-import { LogOutIcon, SearchIcon } from 'lucide-react'
+import Link from 'next/link'
+import { BookOpenIcon, LogOutIcon, SearchIcon } from 'lucide-react'
 
 // Widget-local roster poll cadence. Deliberately calmer than the admin
 // sidebar's default (10s) — this view targets phones over WAN.
@@ -54,6 +55,11 @@ export function ModWidget() {
         <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
           Mod
         </span>
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" asChild aria-label="Docs">
+          <Link href="/docs">
+            <BookOpenIcon className="h-4 w-4" />
+          </Link>
+        </Button>
         <Button
           variant="ghost"
           size="icon"

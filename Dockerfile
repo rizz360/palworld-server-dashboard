@@ -6,9 +6,13 @@ WORKDIR /app
 FROM base AS deps
 
 COPY package.json package-lock.json ./
+COPY scripts/patch-nextra-theme-docs.mjs ./scripts/patch-nextra-theme-docs.mjs
 RUN npm ci
 
 FROM base AS builder
+
+ARG NEXT_PUBLIC_DEMO_MODE=false
+ENV NEXT_PUBLIC_DEMO_MODE=$NEXT_PUBLIC_DEMO_MODE
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -20,6 +24,7 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DEMO_MODE=false
 
 WORKDIR /app
 

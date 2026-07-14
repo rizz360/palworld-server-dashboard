@@ -1,6 +1,10 @@
 import type { AccessTier, FpsSample, Player, ServerInfo, ServerMetrics } from '@/lib/types'
 
-export const DEMO_MODE = process.env.DEMO_MODE === '1' || process.env.NEXT_PUBLIC_DEMO_MODE === '1'
+function enabled(value: string | undefined) {
+  return value === 'true' || value === '1'
+}
+
+export const DEMO_MODE = enabled(process.env.DEMO_MODE) || enabled(process.env.NEXT_PUBLIC_DEMO_MODE)
 export const DEMO_PASSWORD = process.env.DEMO_PASSWORD || 'demo'
 
 export function isDemoPassword(password: string) {

@@ -1,4 +1,5 @@
 import os from 'node:os'
+import nextra from 'nextra'
 
 function getAllowedDevOrigins() {
   const allowedOrigins = new Set(['localhost', '127.0.0.1'])
@@ -14,12 +15,21 @@ function getAllowedDevOrigins() {
   return Array.from(allowedOrigins)
 }
 
+const withNextra = nextra({
+  contentDirBasePath: '/docs',
+})
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   output: 'standalone',
   allowedDevOrigins: getAllowedDevOrigins(),
+  turbopack: {
+    resolveAlias: {
+      'next-mdx-import-source-file': './mdx-components.tsx',
+    },
+  },
 }
 
-export default nextConfig
+export default withNextra(nextConfig)
