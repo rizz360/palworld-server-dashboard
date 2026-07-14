@@ -92,9 +92,12 @@ export function CircuitBackground({
           }
         }
 
+        /* steps() instead of linear: the flow advances 5x/s and the compositor
+           sleeps between ticks. A continuous animation forced a recomposite of
+           every backdrop-blur card at full refresh rate (~20% GPU at idle). */
         .animate-circuit path {
           stroke-dasharray: 10 5;
-          animation: circuit-flow 10s linear infinite;
+          animation: circuit-flow 10s steps(50, end) infinite;
         }
       `}</style>
     </div>

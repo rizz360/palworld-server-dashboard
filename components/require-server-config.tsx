@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { LoginForm } from '@/components/login-form'
 import { LoginTransition } from '@/components/login-transition'
+import { ModWidget } from '@/components/mod-widget'
 import { LOGIN_TRANSITION_SESSION_KEY } from '@/lib/session-keys'
 import { useServer } from '@/lib/server-context'
 
@@ -35,6 +36,14 @@ export function RequireServerConfig({ children }: { children: ReactNode }) {
         onComplete={() => setShowTransition(false)}
       />
     )
+  }
+
+  // MOD tier gets the minimal personnel-ledger widget instead of the full
+  // dashboard. This is view selection only — the proxy re-derives the tier
+  // from the password on every request and 403s non-allowlisted endpoints,
+  // so a tampered stored tier changes nothing server-side.
+  if (config?.accessTier === 'mod') {
+    return <ModWidget />
   }
 
   return <>{children}</>

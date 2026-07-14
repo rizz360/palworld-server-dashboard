@@ -18,6 +18,8 @@ interface DataStreamProps extends React.HTMLAttributes<HTMLDivElement> {
   maxVisible?: number
   streaming?: boolean
   hideScrollbar?: boolean
+  /** Fill the parent instead of capping height at maxVisible rows; feed scrolls internally. */
+  fill?: boolean
 }
 
 const typeColor: Record<string, string> = {
@@ -40,6 +42,7 @@ export function DataStream({
   maxVisible = 8,
   streaming = true,
   hideScrollbar = false,
+  fill = false,
   className,
   ...props
 }: DataStreamProps) {
@@ -128,6 +131,7 @@ export function DataStream({
       data-slot="tron-data-stream"
       className={cn(
         "relative overflow-hidden rounded border border-primary/30 bg-card/80 backdrop-blur-sm",
+        fill && "flex flex-col",
         className
       )}
       {...props}
@@ -136,7 +140,7 @@ export function DataStream({
 
       <div className="relative z-10 flex items-center gap-2 border-b border-border/50 px-4 py-2">
         {streaming && (
-          <div className="status-dot h-1.5 w-1.5 animate-pulse rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" />
+          <div className="status-dot h-1.5 w-1.5 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" />
         )}
         <span className="text-[10px] uppercase tracking-widest text-foreground/80">
           {title}
@@ -150,9 +154,10 @@ export function DataStream({
         ref={scrollRef}
         className={cn(
           "relative z-10 overflow-y-auto font-mono text-xs",
+          fill && "min-h-0 flex-1",
           hideScrollbar && "scrollbar-hidden"
         )}
-        style={{ maxHeight: maxVisible * 28 }}
+        style={fill ? undefined : { maxHeight: maxVisible * 28 }}
       >
         {entries.slice(0, visibleCount).map((entry, i) => {
           const type = entry.type ?? "info"

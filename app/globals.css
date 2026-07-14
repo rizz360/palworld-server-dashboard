@@ -429,7 +429,7 @@
     height: 4rem;
     position: relative;
     z-index: 2;
-    animation: login-avatar-bob 3.4s ease-in-out infinite;
+    animation: login-avatar-bob 3.4s steps(17, end) infinite;
     box-shadow:
       0 0 0 1px color-mix(in oklab, var(--primary) 30%, transparent),
       0 8px 22px color-mix(in oklab, var(--primary) 22%, transparent);
@@ -437,7 +437,7 @@
 
   .login-avatar-image {
     filter: saturate(1.08) contrast(1.03);
-    animation: login-avatar-image-shimmer 2.4s ease-in-out infinite;
+    animation: login-avatar-image-shimmer 2.4s steps(12, end) infinite;
   }
 
   .login-avatar-ring {
@@ -458,8 +458,8 @@
       inset 0 0 0 1px color-mix(in oklab, var(--primary) 35%, transparent),
       0 0 14px color-mix(in oklab, var(--primary) 45%, transparent);
     animation:
-      login-avatar-ring-pulse 2.1s ease-in-out infinite,
-      login-avatar-glow-spin 4.8s linear infinite;
+      login-avatar-ring-pulse 2.1s steps(10, end) infinite,
+      login-avatar-glow-spin 4.8s steps(24, end) infinite;
     pointer-events: none;
   }
 
@@ -475,7 +475,7 @@
     box-shadow:
       0 0 0 1px color-mix(in oklab, var(--foreground) 20%, transparent),
       0 0 12px color-mix(in oklab, var(--accent) 75%, transparent);
-    animation: login-avatar-spark 1.9s ease-in-out infinite;
+    animation: login-avatar-spark 1.9s steps(10, end) infinite;
     pointer-events: none;
   }
 
@@ -595,3 +595,10 @@
   }
 
 }
+
+/* GPU: cap decorative pulses/pings to discrete ticks so an idle/background tab
+   doesn't re-composite (and re-blur every backdrop card) at the monitor's full
+   refresh rate. steps() lets the compositor sleep between ticks. animate-spin is
+   left alone — it's transient (loaders) and stepping a spinner looks broken. */
+.animate-pulse { animation-timing-function: steps(10, end) !important; }
+.animate-ping { animation-timing-function: steps(6, end) !important; }

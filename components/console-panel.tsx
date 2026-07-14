@@ -49,7 +49,7 @@ export function ConsolePanel() {
   }))
 
   return (
-    <div className="border-t border-border/50 bg-card/20 p-3 sm:p-4">
+    <div className="flex h-full min-h-[34rem] flex-col rounded border border-border/50 bg-card/50 p-3 backdrop-blur-sm sm:p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.24em]">
           Console Feed ({consoleLogs.length})
@@ -64,18 +64,21 @@ export function ConsolePanel() {
           Clear
         </Button>
       </div>
-      <DataStream
-        title="SYSTEM TERMINAL"
-        entries={
-          streamEntries.length > 0
-            ? streamEntries
-            : [{ text: 'NO LOGS YET. API RESPONSES WILL APPEAR HERE.', type: 'warning' as const }]
-        }
-        maxVisible={10}
-        streaming={streamEntries.length > 0}
-        hideScrollbar
-        className="min-h-[10rem] sm:min-h-[14rem]"
-      />
+      {/* Fill the grid cell: absolute inset feed never drives row height, scrolls internally. */}
+      <div className="relative min-h-[10rem] flex-1 sm:min-h-[14rem]">
+        <DataStream
+          title="SYSTEM TERMINAL"
+          entries={
+            streamEntries.length > 0
+              ? streamEntries
+              : [{ text: 'NO LOGS YET. API RESPONSES WILL APPEAR HERE.', type: 'warning' as const }]
+          }
+          fill
+          streaming={streamEntries.length > 0}
+          hideScrollbar
+          className="absolute inset-0"
+        />
+      </div>
     </div>
   )
 }

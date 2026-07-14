@@ -147,7 +147,7 @@ export function Terminal({
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
           className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent"
-          style={{ animation: "terminalScan 5s ease-in-out infinite" }}
+          style={{ animation: "terminalScan 5s steps(25, end) infinite" }}
         />
       </div>
 

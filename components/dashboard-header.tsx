@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useServer } from '@/lib/server-context'
 import { useTheme } from '@/lib/theme-context'
-import { InfoPanel } from '@/components/status-bar'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -12,9 +12,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { SignalIndicator } from '@/components/signal-indicator'
-import { UplinkHeader } from '@/components/uplink-header'
-import { CheckIcon, PaletteIcon } from 'lucide-react'
+import { CheckIcon, CopyIcon, PaletteIcon, SettingsIcon } from 'lucide-react'
+import { PanelSettingsDialog } from '@/components/panel-settings-dialog'
 
 type DashboardTab = 'dashboard' | 'map'
 
@@ -24,85 +23,121 @@ interface DashboardHeaderProps {
   onPlayersClick?: () => void
 }
 
+// The ONE connection truth on the dashboard view. Colors match the previous
+// SignalIndicator status palette (green/amber/red).
+const CONNECTION_DOT_CLASS: Record<'connected' | 'checking' | 'disconnected', string> = {
+  connected: 'bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]',
+  checking: 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.6)] animate-pulse',
+  disconnected: 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)] animate-pulse',
+}
+
+const CONNECTION_TEXT_CLASS: Record<'connected' | 'checking' | 'disconnected', string> = {
+  connected: 'text-green-500',
+  checking: 'text-amber-500',
+  disconnected: 'text-red-500',
+}
+
 export function DashboardHeader({ activeTab = 'dashboard', onTabChange, onPlayersClick }: DashboardHeaderProps) {
-  const { config, clearConfig, players, connectionStatus } = useServer()
+  const { config, clearConfig, players, connectionStatus, serverInfo } = useServer()
   const { theme, setTheme, themes } = useTheme()
+  const [addressCopied, setAddressCopied] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
-    document.body.classList.add('dashboard-interactive-glow')
+    if (!addressCopied) return
+    const timer = window.setTimeout(() => setAddressCopied(false), 2000)
+    return () => window.clearTimeout(timer)
+  }, [addressCopied])
 
-    return () => {
-      document.body.classList.remove('dashboard-interactive-glow')
+  const gameAddress = config ? `${config.serverIp}:${config.gamePort}` : null
+
+  const copyAddress = async () => {
+    if (!gameAddress) return
+    try {
+      await navigator.clipboard.writeText(gameAddress)
+      setAddressCopied(true)
+    } catch {
+      // Clipboard unavailable (e.g. insecure context) — address stays visible.
     }
-  }, [])
+  }
 
-  const statusLabel = connectionStatus === 'connected'
-    ? 'LINK STABLE'
-    : connectionStatus === 'checking'
-      ? 'VERIFYING'
-      : 'OFFLINE'
-
-  const panelStatus = connectionStatus === 'connected'
-    ? 'complete'
-    : connectionStatus === 'checking'
-      ? 'pending'
-      : 'active'
-
-  const signalStrength = connectionStatus === 'connected' ? 100 : connectionStatus === 'checking' ? 45 : 0
   const currentTab = activeTab
 
   return (
     <header>
       <div className="mx-auto w-full max-w-[1680px] px-3 pt-3 sm:px-4 sm:pt-4 lg:px-6">
-        <InfoPanel
-          title="Palworld Admin"
-          subtitle={config ? `${config.serverIp}:${config.restApiPort} | Game ${config.gamePort}` : 'Awaiting Server Link'}
-          status={panelStatus}
-          className="overflow-visible"
-        >
-          <UplinkHeader
-            leftText="COMMAND NAVIGATION"
-            rightText={config ? `${config.serverIp}:${config.restApiPort} | G:${config.gamePort}` : 'NO TARGET'}
-            variant={connectionStatus === 'connected' ? 'cyan' : connectionStatus === 'checking' ? 'amber' : 'orange'}
-            className="mb-4 -mx-4 sm:-mx-4"
-          />
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-3 sm:items-center">
-              <SignalIndicator
-                strength={signalStrength}
-                label="Uplink"
-                showValue
-                status={connectionStatus === 'connected' ? 'connected' : connectionStatus === 'checking' ? 'weak' : 'disconnected'}
-              />
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
-                  Control Channel
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-3">
-                  <span className="font-mono text-xs uppercase tracking-[0.16em] text-primary sm:text-sm sm:tracking-[0.18em]">{statusLabel}</span>
-                  <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground sm:text-xs sm:tracking-[0.22em]">
-                    {players.length.toString().padStart(2, '0')} Operators Tracked
+        <div className="rounded border border-border/50 bg-card/50 px-3 py-2.5 backdrop-blur-sm sm:px-4">
+          <div className="flex flex-col gap-3 xl:grid xl:grid-cols-[1fr_auto_1fr] xl:items-center">
+            {/* Left: identity + connection + address */}
+            <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex min-w-0 items-baseline gap-2 font-mono">
+                <span className="truncate text-sm font-bold uppercase tracking-[0.14em] text-foreground">
+                  {serverInfo?.servername ?? 'Palworld Server'}
+                </span>
+                {serverInfo?.version && (
+                  <span className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                    v{serverInfo.version}
                   </span>
-                </div>
+                )}
               </div>
+
+              <div className="flex shrink-0 items-center gap-2">
+                <span className={cn('status-dot h-2 w-2 rounded-full', CONNECTION_DOT_CLASS[connectionStatus])} />
+                <span className={cn('font-mono text-[10px] uppercase tracking-[0.2em]', CONNECTION_TEXT_CLASS[connectionStatus])}>
+                  {connectionStatus}
+                </span>
+              </div>
+
+              {config && gameAddress ? (
+                <button
+                  type="button"
+                  onClick={copyAddress}
+                  title={`Game ${gameAddress} · REST ${config.serverIp}:${config.restApiPort}`}
+                  className="group flex min-w-0 items-center gap-1.5 rounded border border-border/50 bg-muted/20 px-2 py-1 font-mono text-[11px] tracking-[0.08em] text-foreground/80 transition-colors hover:border-primary/50 hover:text-primary"
+                >
+                  <span className="truncate">{gameAddress}</span>
+                  {addressCopied ? (
+                    <CheckIcon className="h-3 w-3 shrink-0 text-primary" />
+                  ) : (
+                    <CopyIcon className="h-3 w-3 shrink-0 text-muted-foreground group-hover:text-primary" />
+                  )}
+                </button>
+              ) : (
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                  Awaiting Server Link
+                </span>
+              )}
             </div>
 
-            <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto lg:justify-end">
-              <Tabs
-                value={currentTab}
-                onValueChange={(value) => onTabChange?.(value === 'map' ? 'map' : 'dashboard')}
-                className="w-full sm:w-auto"
-              >
-                <TabsList className="h-10 w-full rounded-md border border-border/60 bg-muted/20 sm:w-auto">
-                  <TabsTrigger value="dashboard" className="px-3 font-mono text-[11px] uppercase tracking-[0.2em] data-[state=active]:border-primary/60 data-[state=active]:bg-primary/10 data-[state=active]:text-primary sm:px-4">
-                    Dashboard
-                  </TabsTrigger>
-                  <TabsTrigger value="map" className="px-3 font-mono text-[11px] uppercase tracking-[0.2em] data-[state=active]:border-primary/60 data-[state=active]:bg-primary/10 data-[state=active]:text-primary sm:px-4">
-                    Live Map
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+            {/* Center: tab switcher */}
+            <Tabs
+              value={currentTab}
+              onValueChange={(value) => onTabChange?.(value === 'map' ? 'map' : 'dashboard')}
+              className="w-full sm:w-auto xl:justify-self-center"
+            >
+              <TabsList className="h-10 w-full rounded-md border border-border/60 bg-muted/20 sm:w-auto">
+                <TabsTrigger value="dashboard" className="px-3 font-mono text-[11px] uppercase tracking-[0.2em] data-[state=active]:border-primary/60 data-[state=active]:bg-primary/10 data-[state=active]:text-primary sm:px-4">
+                  Dashboard
+                </TabsTrigger>
+                <TabsTrigger value="map" className="px-3 font-mono text-[11px] uppercase tracking-[0.2em] data-[state=active]:border-primary/60 data-[state=active]:bg-primary/10 data-[state=active]:text-primary sm:px-4">
+                  Live Map
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
 
+            {/* Right: theme, roster (<xl), disconnect */}
+            <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto xl:justify-self-end">
+              {config?.accessTier === 'admin' && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setSettingsOpen(true)}
+                  aria-label="Panel settings"
+                  className="h-8 w-8"
+                >
+                  <SettingsIcon className="h-3.5 w-3.5" />
+                </Button>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -161,8 +196,9 @@ export function DashboardHeader({ activeTab = 'dashboard', onTabChange, onPlayer
               </Button>
             </div>
           </div>
-        </InfoPanel>
+        </div>
       </div>
+      <PanelSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </header>
   )
 }

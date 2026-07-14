@@ -1,8 +1,14 @@
+// Panel access tier. Resolved server-side at login (app/api/auth-tier) and
+// re-derived from the password on every proxied request — the stored value
+// only selects which view to render, never what the server permits.
+export type AccessTier = 'admin' | 'mod'
+
 export interface ServerConfig {
   serverIp: string
   restApiPort: string
   gamePort: string
   adminPassword: string
+  accessTier?: AccessTier
 }
 
 export interface Player {

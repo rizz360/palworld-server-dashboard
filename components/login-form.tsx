@@ -10,12 +10,20 @@ import { buildPalworldProxyHeaders, buildPalworldProxyPath } from '@/lib/palworl
 import { LOGIN_TRANSITION_SESSION_KEY } from '@/lib/session-keys'
 import { InfoPanel, StatusBar } from '@/components/status-bar'
 import { Terminal } from '@/components/terminal'
-import { ServerIcon, KeyIcon, NetworkIcon, Loader2Icon, CheckCircle2Icon, XCircleIcon } from 'lucide-react'
-import type { ServerConfig } from '@/lib/types'
+import { KeyIcon, Loader2Icon, CheckCircle2Icon, XCircleIcon } from 'lucide-react'
+import type { AccessTier, ServerConfig } from '@/lib/types'
 
 const SERVER_CONFIG_STORAGE_KEY = 'serverConfig'
 const VALIDATION_DEBOUNCE_MS = 500
 const VALIDATION_REQUEST_TIMEOUT_MS = 5_000
+
+// When the panel is exposed to the internet, the proxy pins the upstream REST
+// target server-side (PALWORLD_REST_URL). These address values are kept
+// only so the stored config stays well-formed and the header/context display
+// keeps working — the proxy ignores them and always talks to the pinned upstream.
+const PINNED_SERVER_IP = '127.0.0.1'
+const PINNED_REST_API_PORT = '8212'
+const PINNED_GAME_PORT = '8211'
 
 type ValidationState = 'idle' | 'checking' | 'valid' | 'invalid'
 
@@ -25,32 +33,23 @@ interface LoginConfigPayload {
   adminPassword: string
 }
 
-function toFriendlyValidationMessage(rawMessage: string, config: LoginConfigPayload) {
+function toFriendlyValidationMessage(rawMessage: string) {
   const message = rawMessage.trim()
-  const target = `${config.serverIp}:${config.restApiPort}`
 
   if (!message) {
-    return `Could not validate the server connection. Check host (${target}), REST API port, and admin password.`
-  }
-
-  if (/fetch failed|failed to fetch/i.test(message)) {
-    return `Cannot reach the REST API at ${target}. Check the IP/URL and REST API port, then make sure the server is online and reachable through firewall/network rules.`
+    return 'Could not verify your password. Make sure the server is online and try again.'
   }
 
   if (/401|unauthorized|forbidden/i.test(message)) {
-    return 'Authentication failed. Check the admin password and confirm REST API authentication is enabled on the server.'
+    return 'Authentication failed. Check your password and try again.'
   }
 
-  if (/enotfound|eai_again|getaddrinfo|resolve/i.test(message)) {
-    return `Host "${config.serverIp}" could not be resolved. Check for typos in the IP/URL or a DNS issue.`
-  }
-
-  if (/econnrefused|refused/i.test(message)) {
-    return `Connection was refused at ${target}. Confirm the REST API port is correct and the server is listening on that port.`
+  if (/fetch failed|failed to fetch|econnrefused|refused/i.test(message)) {
+    return 'Cannot reach the server right now. It may be offline — try again shortly.'
   }
 
   if (/etimedout|timed out|timeout/i.test(message)) {
-    return `Connection to ${target} timed out. Check network reachability, firewall rules, and that the server is running.`
+    return 'The connection timed out. The server may be busy or offline; try again.'
   }
 
   return message
@@ -111,13 +110,32 @@ async function validateServerConnection(config: LoginConfigPayload, signal?: Abo
   }
 }
 
+// Resolve the panel access tier for the entered password. Passwords are only
+// compared server-side; the response carries the tier and nothing else.
+async function fetchAccessTier(password: string): Promise<AccessTier | 'invalid'> {
+  try {
+    const response = await fetch('/api/auth-tier', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+      cache: 'no-store',
+    })
+
+    if (!response.ok) {
+      return 'invalid'
+    }
+
+    const data = (await response.json()) as { tier?: unknown }
+    return data.tier === 'admin' || data.tier === 'mod' ? data.tier : 'invalid'
+  } catch {
+    return 'invalid'
+  }
+}
+
 export function LoginForm() {
   const { setConfig } = useServer()
-  const [serverIp, setServerIp] = useState('')
-  const [restApiPort, setRestApiPort] = useState('8212')
-  const [gamePort, setGamePort] = useState('8211')
   const [adminPassword, setAdminPassword] = useState('')
-  const [rememberMe, setRememberMe] = useState(false)
+  const [rememberMe, setRememberMe] = useState(true)
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState('')
   const [validationState, setValidationState] = useState<ValidationState>('idle')
@@ -142,7 +160,7 @@ export function LoginForm() {
     const nextLine =
       validationState === 'checking'
         ? {
-            text: 'LIVE VALIDATION: CHECKING HOST, REST PORT, AND ADMIN PASSWORD',
+            text: 'LIVE VALIDATION: CHECKING PASSWORD',
             type: 'system' as const,
           }
         : validationState === 'valid'
@@ -180,7 +198,7 @@ export function LoginForm() {
       { text: 'LOADING SERVER LINK PROTOCOLS', type: 'output' as const },
       { text: 'VERIFY PALWORLD REST ENDPOINT', type: 'output' as const },
       { text: 'LIVE VALIDATION MONITOR ARMED', type: 'system' as const },
-      { text: 'AWAITING OPERATOR CREDENTIALS', type: 'input' as const },
+      { text: 'AWAITING OPERATOR PASSWORD', type: 'input' as const },
       ...bootValidationLines,
     ],
     [bootValidationLines]
@@ -193,10 +211,10 @@ export function LoginForm() {
     }
 
     try {
+      // Only the password is restored into the form now; the address values are
+      // pinned constants applied at submit, so a saved config that predates the
+      // password-only login (or lacks the address fields) still restores cleanly.
       const parsed = JSON.parse(storedConfigRaw) as Partial<ServerConfig>
-      setServerIp(String(parsed.serverIp ?? '').trim())
-      setRestApiPort(String(parsed.restApiPort ?? '8212').trim() || '8212')
-      setGamePort(String(parsed.gamePort ?? '8211').trim() || '8211')
       setAdminPassword(String(parsed.adminPassword ?? ''))
       setRememberMe(true)
     } catch {
@@ -206,64 +224,40 @@ export function LoginForm() {
 
   useEffect(() => {
     const normalizedConfig = {
-      serverIp: serverIp.trim(),
-      restApiPort: restApiPort.trim(),
+      serverIp: PINNED_SERVER_IP,
+      restApiPort: PINNED_REST_API_PORT,
       adminPassword,
     }
 
-    const isReadyForValidation =
-      normalizedConfig.serverIp.length > 0 &&
-      normalizedConfig.restApiPort.length > 0 &&
-      normalizedConfig.adminPassword.length > 0
-
-    if (!isReadyForValidation) {
+    // LOCAL-only readiness (fixed 2026-07-10): previously this probed /info on
+    // every keystroke, and each wrong-password probe hit the server-side
+    // brute-force limiter — so merely TYPING burned failures and locked users
+    // out in ~1 attempt. No network here now; real auth happens on submit.
+    if (normalizedConfig.adminPassword.length === 0) {
       setValidationState('idle')
       setValidationMessage('')
-      return
+    } else {
+      setValidationState('idle')
+      setValidationMessage('Press connect to authenticate.')
     }
-
-    const controller = new AbortController()
-    const timeout = window.setTimeout(async () => {
-      setValidationState('checking')
-      setValidationMessage('Validating server credentials...')
-
-      try {
-        await validateServerConnection(normalizedConfig, controller.signal)
-
-        setValidationState('valid')
-        setValidationMessage('Live validation passed: host, REST API port, and admin password are verified.')
-      } catch (err) {
-        if (controller.signal.aborted) {
-          return
-        }
-
-        const rawMessage = err instanceof Error ? err.message : 'Validation failed'
-        const message = toFriendlyValidationMessage(rawMessage, normalizedConfig)
-        setValidationState('invalid')
-        setValidationMessage(message)
-      }
-    }, VALIDATION_DEBOUNCE_MS)
-
-    return () => {
-      controller.abort()
-      window.clearTimeout(timeout)
-    }
-  }, [serverIp, restApiPort, adminPassword])
+  }, [adminPassword])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setIsConnecting(true)
 
+    // Address values are pinned constants (display/compat only) — the proxy
+    // ignores them and talks to the server-side PALWORLD_REST_URL upstream.
     const normalizedConfig = {
-      serverIp: serverIp.trim(),
-      restApiPort: restApiPort.trim(),
-      gamePort: gamePort.trim(),
+      serverIp: PINNED_SERVER_IP,
+      restApiPort: PINNED_REST_API_PORT,
+      gamePort: PINNED_GAME_PORT,
       adminPassword,
     }
 
-    if (!normalizedConfig.serverIp || !normalizedConfig.restApiPort || !normalizedConfig.gamePort || !normalizedConfig.adminPassword) {
-      setError('All fields are required')
+    if (!normalizedConfig.adminPassword) {
+      setError('Password is required')
       setIsConnecting(false)
       return
     }
@@ -271,12 +265,19 @@ export function LoginForm() {
     try {
       await validateServerConnection(normalizedConfig)
 
+      // validateServerConnection succeeded, so the password is live. Resolve
+      // which tier it authenticated as; 'invalid' at this point means a
+      // directly-entered real game credential the panel env does not list —
+      // that keeps full admin access (passthrough), same as before.
+      const tierResult = await fetchAccessTier(normalizedConfig.adminPassword)
+      const accessTier: AccessTier = tierResult === 'mod' ? 'mod' : 'admin'
+
       sessionStorage.setItem(LOGIN_TRANSITION_SESSION_KEY, '1')
-      setConfig(normalizedConfig, { rememberMe })
+      setConfig({ ...normalizedConfig, accessTier }, { rememberMe })
     } catch (err) {
       const rawMessage = err instanceof Error ? err.message : 'Unknown error'
-      const message = toFriendlyValidationMessage(rawMessage, normalizedConfig)
-      setError(`Failed to connect: ${message}`)
+      const message = toFriendlyValidationMessage(rawMessage)
+      setError(message)
     } finally {
       setIsConnecting(false)
     }
@@ -320,7 +321,7 @@ export function LoginForm() {
                 <div className="login-avatar-spark" />
               </div>
               <p className="mt-4 max-w-md text-sm text-muted-foreground">
-                Connect to your Palworld server REST API and bring the control grid online.
+                Enter your operator password to bring the control grid online.
               </p>
             </div>
 
@@ -328,67 +329,7 @@ export function LoginForm() {
               <form onSubmit={handleSubmit} className="space-y-6" autoComplete="on" data-1p-ignore="false">
                 <FieldGroup>
                   <Field>
-                    <FieldLabel htmlFor="serverIp">Server IP or URL</FieldLabel>
-                    <div className="relative">
-                      <NetworkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
-                      <Input
-                        id="serverIp"
-                        name="serverIp"
-                        type="text"
-                        autoComplete="url"
-                        placeholder="192.168.1.100 or play.example.com"
-                        value={serverIp}
-                        onChange={(e) => setServerIp(e.target.value)}
-                        required
-                        className={`pl-10 ${inputValidationClass}`}
-                      />
-                    </div>
-                  </Field>
-
-                  <Field>
-                    <FieldLabel htmlFor="restApiPort">REST API Port</FieldLabel>
-                    <div className="relative">
-                      <ServerIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
-                      <Input
-                        id="restApiPort"
-                        name="restApiPort"
-                        type="text"
-                        autoComplete="off"
-                        data-1p-ignore="true"
-                        data-bwignore="true"
-                        data-lpignore="true"
-                        placeholder="8212"
-                        value={restApiPort}
-                        onChange={(e) => setRestApiPort(e.target.value)}
-                        required
-                        className={`pl-10 ${inputValidationClass}`}
-                      />
-                    </div>
-                  </Field>
-
-                  <Field>
-                    <FieldLabel htmlFor="gamePort">Game Port</FieldLabel>
-                    <div className="relative">
-                      <ServerIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
-                      <Input
-                        id="gamePort"
-                        name="gamePort"
-                        type="text"
-                        autoComplete="off"
-                        data-1p-ignore="true"
-                        data-bwignore="true"
-                        data-lpignore="true"
-                        placeholder="8211"
-                        value={gamePort}
-                        onChange={(e) => setGamePort(e.target.value)}
-                        required
-                        className={`pl-10 ${inputValidationClass}`}
-                      />
-                    </div>
-                  </Field>
-
-                  <Field>
-                    <FieldLabel htmlFor="adminPassword">Admin Password</FieldLabel>
+                    <FieldLabel htmlFor="adminPassword">Password</FieldLabel>
                     <div className="relative">
                       <KeyIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white" />
                       <Input
@@ -396,7 +337,7 @@ export function LoginForm() {
                         name="adminPassword"
                         type="password"
                         autoComplete="current-password"
-                        placeholder="Enter admin password"
+                        placeholder="Enter your password"
                         value={adminPassword}
                         onChange={(e) => setAdminPassword(e.target.value)}
                         required
@@ -415,7 +356,7 @@ export function LoginForm() {
                 <div className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/20 px-3 py-2">
                   <div>
                     <label htmlFor="rememberMe" className="text-sm font-medium text-foreground">Remember me</label>
-                    <p className="text-xs text-muted-foreground">Save server IP, ports, and admin password on this device.</p>
+                    <p className="text-xs text-muted-foreground">Save your password on this device.</p>
                   </div>
                   <Switch
                     id="rememberMe"
