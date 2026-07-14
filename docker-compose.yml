@@ -23,6 +23,8 @@ services:
       PALWORLD_REST_URL: ${PALWORLD_REST_URL:-http://host.docker.internal:8212}
       PANEL_AUTH_FILE: /app/data/panel-auth.json
       RATE_LIMIT_TRUST_PROXY: ${RATE_LIMIT_TRUST_PROXY:-false}
+      NEXT_PUBLIC_DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-false}
+      DEMO_MODE: ${NEXT_PUBLIC_DEMO_MODE:-false}
       # FPS history ring written by the palworld-fps-sampler sidecar below.
       PALWORLD_FPS_HISTORY_FILE: /metrics/fps-history.json
     volumes:

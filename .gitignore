@@ -13,6 +13,9 @@ next.user-config.*
 .env.*
 !.env.example
 
+# Runtime state
+data/
+
 # Common ignores
 node_modules/
 .next/
@@ -27,6 +30,10 @@ pnpm-debug.log*
 # Editor settings
 .vscode/
 .idea/
+
+# Generated search index
+.pagefind-site/
+public/_pagefind/
 
 # Test output
 coverage/

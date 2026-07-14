@@ -1,0 +1,49 @@
+---
+title: Demo Mode
+---
+
+# Demo Mode
+
+Demo mode launches the dashboard with built-in sample data instead of connecting to a real Palworld server.
+
+## Enable demo mode
+
+```env
+NEXT_PUBLIC_DEMO_MODE=true
+```
+
+Then restart the app.
+
+For local production builds, set the value before building:
+
+```bash
+NEXT_PUBLIC_DEMO_MODE=true npm run build
+npm run start
+```
+
+For Docker Compose, the value is passed through at runtime:
+
+```env
+NEXT_PUBLIC_DEMO_MODE=true
+```
+
+Then recreate the container:
+
+```bash
+docker compose up -d --force-recreate
+```
+
+## What demo mode changes
+
+- The login screen shows a `Launch Demo` button.
+- No Palworld REST API connection is required.
+- The dashboard uses sample server info, players, metrics, settings, and FPS history.
+- Demo mode is for previews only. Do not use it as a security control.
+
+## Disable demo mode
+
+```env
+NEXT_PUBLIC_DEMO_MODE=false
+```
+
+Then rebuild or restart according to your deployment method.
