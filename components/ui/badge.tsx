@@ -1,1 +1,1 @@
-export { Badge, badgeVariants } from '@/components/badge'
+export { Badge } from '@/components/badge'

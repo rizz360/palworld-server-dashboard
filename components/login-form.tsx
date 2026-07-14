@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { FieldGroup, Field, FieldLabel } from '@/components/ui/field'
 import { buildPalworldProxyHeaders, buildPalworldProxyPath } from '@/lib/palworld'
-import { demoConfig, DEMO_MODE } from '@/lib/demo'
+import { demoConfig } from '@/lib/demo'
 import { LOGIN_TRANSITION_SESSION_KEY } from '@/lib/session-keys'
 import { InfoPanel, StatusBar } from '@/components/status-bar'
 import { Terminal } from '@/components/terminal'
@@ -138,7 +138,7 @@ export function LoginForm() {
   const [adminPassword, setAdminPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(true)
   const [isConnecting, setIsConnecting] = useState(false)
-  const [isDemoMode, setIsDemoMode] = useState(DEMO_MODE)
+  const [isDemoMode, setIsDemoMode] = useState(false)
   const [error, setError] = useState('')
   const [validationState, setValidationState] = useState<ValidationState>('idle')
   const [validationMessage, setValidationMessage] = useState('')

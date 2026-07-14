@@ -126,11 +126,6 @@ export function isModEnabled(): boolean {
   return !!(store && store.mod)
 }
 
-/** Whether the store is usable (file present or seedable). Not an auth check. */
-export function isInitialized(): boolean {
-  return loadStore() !== null
-}
-
 export function setAdminPassword(newPassword: string): void {
   const store = loadStore()
   const base: Store = store ?? { version: 1, admin: '', mod: null, updatedAt: '' }

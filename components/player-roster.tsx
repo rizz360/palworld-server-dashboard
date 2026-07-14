@@ -61,9 +61,13 @@ interface PlayerRosterProps {
 // (OnlinePlayersPanel) and by the mod-tier ModWidget. Extracted 2026-07-10
 // for the two-tier password build — behavior matches the former inline
 // sidebar rendering exactly.
-// Accounts hidden from the MOD-tier widget only (owner order 2026-07-10). Exact
-// userId match — cannot collide with anyone else. Admin sidebar shows everyone.
-const MOD_WIDGET_HIDDEN_USERIDS = new Set<string>(['steam_76561198067175705'])
+// Accounts hidden from the MOD-tier widget only. Exact userId match — admin sidebar shows everyone.
+const MOD_WIDGET_HIDDEN_USERIDS = new Set(
+  (process.env.NEXT_PUBLIC_MOD_WIDGET_HIDDEN_USERIDS ?? '')
+    .split(',')
+    .map((userId) => userId.trim())
+    .filter(Boolean)
+)
 
 export function PlayerRoster({ search, onAfterAction, variant = 'sidebar', className }: PlayerRosterProps) {
   const { apiCall, players, addBannedPlayer, bannedPlayers, removeBannedPlayer } = useServer()

@@ -9,25 +9,12 @@ Demo mode launches the dashboard with built-in sample data instead of connecting
 ## Enable demo mode
 
 ```env
-NEXT_PUBLIC_DEMO_MODE=true
+DEMO_MODE=1
 ```
 
 Then restart the app.
 
-For local production builds, set the value before building:
-
-```bash
-NEXT_PUBLIC_DEMO_MODE=true npm run build
-npm run start
-```
-
-For Docker Compose, the value is passed through at runtime:
-
-```env
-NEXT_PUBLIC_DEMO_MODE=true
-```
-
-Then recreate the container:
+For Docker Compose, recreate the container:
 
 ```bash
 docker compose up -d --force-recreate
@@ -42,8 +29,4 @@ docker compose up -d --force-recreate
 
 ## Disable demo mode
 
-```env
-NEXT_PUBLIC_DEMO_MODE=false
-```
-
-Then rebuild or restart according to your deployment method.
+Remove `DEMO_MODE` or set it to anything other than `1`, then restart.

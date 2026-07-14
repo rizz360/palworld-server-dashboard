@@ -14,8 +14,7 @@ type RouteContext = {
 }
 
 interface ProxyServerConfig {
-  serverIp: string
-  serverPort: number
+  baseUrl: URL
   adminPassword: string
   tier: AccessTier
 }
@@ -35,43 +34,6 @@ const MOD_TIER_ALLOWLIST: ReadonlySet<string> = new Set([
   'POST unban',
 ])
 
-function parsePort(value: string) {
-  if (!/^\d+$/.test(value)) {
-    return null
-  }
-
-  const port = Number.parseInt(value, 10)
-
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    return null
-  }
-
-  return port
-}
-
-function buildUpstreamBaseUrl(serverIp: string, serverPort: number) {
-  const normalizedHost = serverIp.trim()
-
-  if (!normalizedHost) {
-    return null
-  }
-
-  try {
-    const baseUrl = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(normalizedHost)
-      ? new URL(normalizedHost)
-      : new URL(`http://${normalizedHost}`)
-
-    baseUrl.port = serverPort.toString()
-    baseUrl.pathname = '/'
-    baseUrl.search = ''
-    baseUrl.hash = ''
-
-    return baseUrl
-  } catch {
-    return null
-  }
-}
-
 // Resolves the PINNED upstream target and injects the game's real REST admin
 // password from env. The tier was already verified by the caller, so this does
 // NOT re-hash the presented password — an invalid request costs one scrypt pass,
@@ -82,23 +44,24 @@ function buildUpstreamBaseUrl(serverIp: string, serverPort: number) {
 // host:port — an SSRF once the panel is WAN-exposed (probe/POST to internal
 // hosts like 127.0.0.1:5432). Client serverIp/serverPort are ignored.
 function getServerConfig(tier: AccessTier): ProxyServerConfig | null {
-  const pinned = new URL(process.env.PALWORLD_REST_URL ?? 'http://127.0.0.1:8212')
-  const serverPort = parsePort(pinned.port || '8212')
   // The game's real REST admin password is injected into the upstream call and
   // never reaches the client. PALWORLD_REAL_ADMIN_PASSWORD is an accepted alias.
   const gameAdminPassword =
     process.env.PALWORLD_ADMIN_PASSWORD ?? process.env.PALWORLD_REAL_ADMIN_PASSWORD ?? ''
 
-  if (serverPort == null || !gameAdminPassword) {
+  if (!gameAdminPassword) {
     return null
   }
 
-  return {
-    serverIp: pinned.hostname.trim(),
-    serverPort,
-    adminPassword: gameAdminPassword,
-    tier,
-  } satisfies ProxyServerConfig
+  try {
+    const baseUrl = new URL(process.env.PALWORLD_REST_URL ?? 'http://127.0.0.1:8212')
+    baseUrl.pathname = '/'
+    baseUrl.search = ''
+    baseUrl.hash = ''
+    return { baseUrl, adminPassword: gameAdminPassword, tier } satisfies ProxyServerConfig
+  } catch {
+    return null
+  }
 }
 
 async function getUpstreamRequestBody(request: NextRequest) {
@@ -172,14 +135,8 @@ async function proxyPalworldRequest(request: NextRequest, { params }: RouteConte
     )
   }
 
-  const upstreamBaseUrl = buildUpstreamBaseUrl(serverConfig.serverIp, serverConfig.serverPort)
-
-  if (!upstreamBaseUrl) {
-    return NextResponse.json({ error: 'Invalid server host or REST API port' }, { status: 400 })
-  }
-
   const upstreamPath = path.map((segment) => encodeURIComponent(segment)).join('/')
-  const upstreamUrl = new URL(`/v1/api/${upstreamPath}`, upstreamBaseUrl)
+  const upstreamUrl = new URL(`/v1/api/${upstreamPath}`, serverConfig.baseUrl)
   const body = method === 'POST' ? await getUpstreamRequestBody(request) : undefined
 
   try {

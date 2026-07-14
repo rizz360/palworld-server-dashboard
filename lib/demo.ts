@@ -1,17 +1,11 @@
 import type { FpsSample, Player, ServerInfo, ServerMetrics } from './types'
 
-export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === 'true' || process.env.NEXT_PUBLIC_DEMO_MODE === '1'
-
 export const demoConfig = {
   serverIp: 'demo.local',
   restApiPort: '8212',
   gamePort: '8211',
   adminPassword: 'demo',
   accessTier: 'admin' as const,
-}
-
-export function isDemoConfig(config: { serverIp?: string; adminPassword?: string } | null) {
-  return config?.serverIp === demoConfig.serverIp && config.adminPassword === demoConfig.adminPassword
 }
 
 export const demoServerInfo: ServerInfo = {

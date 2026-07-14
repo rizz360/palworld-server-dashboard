@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises'
 import type { FpsSample } from '@/lib/types'
 
 const HISTORY_FILE = process.env.PALWORLD_FPS_HISTORY_FILE ?? '/run/palworld-metrics/fps-history.json'
-export const FPS_RING_WINDOW_MS = 1 * 60 * 60 * 1000 // keep in sync with the sampler's windowMs
+const FPS_RING_WINDOW_MS = 1 * 60 * 60 * 1000 // keep in sync with the sampler's windowMs
 
 export interface FpsRingPayload {
   available: boolean
