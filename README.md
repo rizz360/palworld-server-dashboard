@@ -17,6 +17,14 @@ Built with Next.js, designed for self-hosting, and meant to feel much friendlier
 
 [Open the live demo](https://palworld-server-dashboard.vercel.app/)
 
+Demo password:
+
+```text
+demo
+```
+
+The demo uses mock Palworld REST API data, so you can click around without affecting a real server.
+
 ## Preview 🖼️
 
 Sensitive data in the dashboard screenshot below has been blurred.
