@@ -581,6 +581,142 @@ function formatAxisAge(ms: number) {
   return `-${Number.isInteger(hours) ? hours.toFixed(0) : hours.toFixed(1)}h`
 }
 
+// ── General health verdict (owner order 2026-07-14) ─────────────────────────
+// One pill, one color, beside the live FPS. Composite 0-100 score: a weighted
+// blend of five signals (structural hour-median heaviest, a 10-min median for
+// recency), then VETO CAPS — any single critical signal alone clamps the
+// verdict ("one bad metric can mean bad"), while several mildly-soft signals
+// drag the blend down together ("enough low-ish metrics also mean bad").
+// Calibrated to the public-server band doctrine: sustained <30 = action
+// needed, <20-25 = broken; short 30s bursts are normal sim spikes.
+
+const HEALTH_RECENT_WINDOW_MS = 10 * 60 * 1000
+const HEALTH_MIN_SAMPLES = 60 // ~5 min of ring data before a verdict is rendered
+
+// fps -> score (piecewise linear between anchors)
+const HEALTH_FPS_ANCHORS: Array<[number, number]> = [
+  [0, 0], [20, 10], [30, 25], [35, 40], [40, 50], [45, 60], [50, 75], [55, 90], [60, 100],
+]
+// % of hour under 30fps -> score
+const HEALTH_BUDGET_ANCHORS: Array<[number, number]> = [
+  [0, 100], [2, 90], [5, 75], [10, 55], [15, 35], [25, 15], [40, 0],
+]
+// longest continuous <45fps stretch (ms) -> score
+const HEALTH_DIP_ANCHORS: Array<[number, number]> = [
+  [0, 100], [15_000, 95], [30_000, 85], [60_000, 70], [90_000, 50], [180_000, 25], [300_000, 0],
+]
+
+function rampScore(anchors: Array<[number, number]>, value: number) {
+  if (value <= anchors[0][0]) return anchors[0][1]
+  for (let i = 1; i < anchors.length; i++) {
+    const [x0, y0] = anchors[i - 1]
+    const [x1, y1] = anchors[i]
+    if (value <= x1) {
+      return y0 + ((value - x0) / (x1 - x0)) * (y1 - y0)
+    }
+  }
+  return anchors[anchors.length - 1][1]
+}
+
+function medianOf(values: number[]) {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+}
+
+interface FpsHealthInput {
+  currentFps: number | null
+  hourMedian: number | null
+  recentMedian: number | null
+  hourAvg: number | null
+  under30Pct: number | null
+  longestDipMs: number | null
+  sampleCount: number
+  newestSampleAgeMs: number
+}
+
+interface FpsHealthVerdict {
+  score: number | null
+  label: string
+  colorClass: string
+  detail: string
+}
+
+function computeFpsHealth(input: FpsHealthInput): FpsHealthVerdict {
+  const muted = 'text-muted-foreground'
+
+  if (input.sampleCount === 0 && input.currentFps == null) {
+    return { score: null, label: 'No Data', colorClass: muted, detail: 'No FPS samples yet — sampler starting or server down.' }
+  }
+  if (input.sampleCount > 0 && input.newestSampleAgeMs > 5 * 60 * 1000) {
+    return { score: null, label: 'Stale', colorClass: muted, detail: 'Newest ring sample is over 5 minutes old — sampler or server down; verdict withheld rather than guessed.' }
+  }
+  if (
+    input.sampleCount < HEALTH_MIN_SAMPLES ||
+    input.hourMedian == null ||
+    input.hourAvg == null ||
+    input.under30Pct == null ||
+    input.longestDipMs == null
+  ) {
+    return { score: null, label: 'Calibrating', colorClass: muted, detail: `Collecting ring data (${input.sampleCount}/${HEALTH_MIN_SAMPLES} samples) — verdict after ~5 minutes.` }
+  }
+
+  const recent = input.recentMedian ?? input.hourMedian
+  const components = {
+    median: rampScore(HEALTH_FPS_ANCHORS, input.hourMedian),
+    recent: rampScore(HEALTH_FPS_ANCHORS, recent),
+    avg: rampScore(HEALTH_FPS_ANCHORS, input.hourAvg),
+    budget: rampScore(HEALTH_BUDGET_ANCHORS, input.under30Pct),
+    dip: rampScore(HEALTH_DIP_ANCHORS, input.longestDipMs),
+  }
+
+  const blend =
+    components.median * 0.30 +
+    components.recent * 0.25 +
+    components.avg * 0.15 +
+    components.budget * 0.15 +
+    components.dip * 0.15
+
+  // Veto caps: [description, cap, tripped]. The tightest tripped cap wins.
+  const caps: Array<[string, number, boolean]> = [
+    ['live FPS < 10', 35, input.currentFps != null && input.currentFps < 10],
+    ['live FPS < 15', 40, input.currentFps != null && input.currentFps < 15],
+    ['10-min median < 25', 25, recent < 25],
+    ['10-min median < 30', 35, recent < 30],
+    ['10-min median < 45', 65, recent < 45],
+    ['hour median < 30', 30, input.hourMedian < 30],
+    ['hour median < 45', 60, input.hourMedian < 45],
+    ['under-30 budget > 25%', 30, input.under30Pct > 25],
+    ['under-30 budget > 10%', 60, input.under30Pct > 10],
+    ['longest dip > 3m', 40, input.longestDipMs > 180_000],
+    ['longest dip > 90s', 60, input.longestDipMs > 90_000],
+  ]
+  const active = caps.filter(([, cap, tripped]) => tripped && cap < blend)
+  const score = Math.min(blend, ...active.map(([, cap]) => cap))
+
+  const [label, colorClass] =
+    score >= 90 ? ['Excellent', 'text-emerald-400'] :
+    score >= 75 ? ['Good', 'text-lime-400'] :
+    score >= 55 ? ['Fair', 'text-yellow-400'] :
+    score >= 35 ? ['Degraded', 'text-orange-400'] :
+    ['Critical', 'text-red-500']
+
+  const limiting = active.length > 0
+    ? active.map(([name, cap]) => `${name} (cap ${cap})`).join(', ')
+    : 'none'
+  const detail =
+    `Health ${Math.round(score)}/100 — ` +
+    `hour median ${input.hourMedian.toFixed(1)} (${Math.round(components.median)}), ` +
+    `10-min median ${recent.toFixed(1)} (${Math.round(components.recent)}), ` +
+    `avg ${input.hourAvg.toFixed(1)} (${Math.round(components.avg)}), ` +
+    `under-30 ${input.under30Pct.toFixed(1)}% (${Math.round(components.budget)}), ` +
+    `longest <45 ${formatDipDuration(input.longestDipMs)} (${Math.round(components.dip)}). ` +
+    `Limiting: ${limiting}.`
+
+  return { score, label, colorClass, detail }
+}
+
 function formatDipDuration(ms: number) {
   const totalSeconds = Math.round(ms / 1000)
   if (totalSeconds < 60) return `${totalSeconds}s`
@@ -686,12 +822,7 @@ function FpsHistoryGraph({
 
   // Health-tile stats (owner order 2026-07-14) — the three watch signals,
   // computed from the same 1h server-side ring the chart renders.
-  const medianFps = (() => {
-    if (fpsValues.length === 0) return null
-    const sorted = [...fpsValues].sort((a, b) => a - b)
-    const mid = Math.floor(sorted.length / 2)
-    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
-  })()
+  const medianFps = medianOf(fpsValues)
 
   // Longest continuous stretch below FPS_DIP_THRESHOLD, gap-aware: a dip
   // cannot chain across a data hole (server/sampler downtime).
@@ -719,6 +850,29 @@ function FpsHistoryGraph({
   const under30Pct = fpsValues.length > 0
     ? (100 * fpsValues.filter((value) => value < 30).length) / fpsValues.length
     : null
+
+  // General health verdict (owner order 2026-07-14) — rendered beside the live FPS.
+  const recentMedianFps = (() => {
+    const cutoff = now - HEALTH_RECENT_WINDOW_MS
+    const recentFps = orderedSamples
+      .filter((sample) => sample.timestamp >= cutoff)
+      .map((sample) => sample.fps)
+    // Need at least ~1 min of recent data, else fall back to the hour median.
+    return recentFps.length >= 12 ? medianOf(recentFps) : null
+  })()
+
+  const health = computeFpsHealth({
+    currentFps,
+    hourMedian: medianFps,
+    recentMedian: recentMedianFps,
+    hourAvg: avgFps,
+    under30Pct,
+    longestDipMs,
+    sampleCount: orderedSamples.length,
+    newestSampleAgeMs: orderedSamples.length > 0
+      ? now - orderedSamples[orderedSamples.length - 1].timestamp
+      : Number.POSITIVE_INFINITY,
+  })
 
   // Segments split on real data holes (server/sampler downtime) so the chart
   // never draws an interpolated bridge across a gap in the ring.
@@ -763,13 +917,27 @@ function FpsHistoryGraph({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Server FPS</p>
-          <div className="mt-1 flex items-end gap-2">
-            <span className={cn('font-mono text-3xl font-semibold tracking-[0.08em]', currentFpsColorClass)}>
-              {currentFps != null ? currentFps.toFixed(1) : 'N/A'}
-            </span>
-            <span className="pb-1 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">Live</span>
+        <div className="flex items-center gap-3">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-muted-foreground">Server FPS</p>
+            <div className="mt-1 flex items-end gap-2">
+              <span className={cn('font-mono text-3xl font-semibold tracking-[0.08em]', currentFpsColorClass)}>
+                {currentFps != null ? currentFps.toFixed(1) : 'N/A'}
+              </span>
+              <span className="pb-1 font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">Live</span>
+            </div>
+          </div>
+          {/* General health verdict (owner order 2026-07-14): blend + veto caps
+              across all ring metrics — hover for the full breakdown. */}
+          <div
+            className={cn(
+              'flex items-center gap-1.5 rounded-full border border-border/60 bg-secondary/35 px-2.5 py-1',
+              health.colorClass
+            )}
+            title={health.detail}
+          >
+            <span className="h-2 w-2 rounded-full bg-current" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em]">{health.label}</span>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -888,6 +1056,12 @@ function FpsHistoryGraph({
             {avgFps != null ? avgFps.toFixed(1) : 'N/A'}
           </div>
         </div>
+        <div className="rounded-lg border border-border/50 bg-secondary/35 px-3 py-2">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Max</div>
+          <div className={cn('mt-1 font-mono text-sm', getFpsTextColorClass(maxFps))}>
+            {maxFps != null ? maxFps.toFixed(1) : 'N/A'}
+          </div>
+        </div>
         <div
           className="rounded-lg border border-border/50 bg-secondary/35 px-3 py-2"
           title="Structural health: the plateau the server actually runs at. If this slides off baseline, standing sim load has grown — that's the signal that matters."
@@ -895,12 +1069,6 @@ function FpsHistoryGraph({
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Median</div>
           <div className={cn('mt-1 font-mono text-sm', getFpsTextColorClass(medianFps))}>
             {medianFps != null ? medianFps.toFixed(1) : 'N/A'}
-          </div>
-        </div>
-        <div className="rounded-lg border border-border/50 bg-secondary/35 px-3 py-2">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Max</div>
-          <div className={cn('mt-1 font-mono text-sm', getFpsTextColorClass(maxFps))}>
-            {maxFps != null ? maxFps.toFixed(1) : 'N/A'}
           </div>
         </div>
         <div
