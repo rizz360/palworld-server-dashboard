@@ -13,6 +13,7 @@
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto'
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { isDemoPassword } from '@/lib/demo-mode'
 import type { AccessTier } from '@/lib/types'
 
 const AUTH_FILE = process.env.PANEL_AUTH_FILE ?? './data/panel-auth.json'
@@ -98,6 +99,7 @@ function verifyCacheClear() {
 
 /** Resolve a presented password to a tier, or null if it matches neither. */
 export function verifyTier(password: string): AccessTier | null {
+  if (isDemoPassword(password)) return 'admin'
   if (!password) return null
   const key = fastKey(password)
   const hit = verifyCache.get(key)

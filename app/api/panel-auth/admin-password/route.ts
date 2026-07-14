@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientIp, isLockedOut, recordFailure } from '@/lib/rate-limit'
+import { DEMO_MODE } from '@/lib/demo-mode'
 import { verifyAdmin, setAdminPassword } from '@/lib/panel-auth-store'
 
 export const runtime = 'nodejs'
@@ -31,6 +32,9 @@ export async function POST(request: NextRequest) {
   }
   if (newPassword.length < MIN_LEN) {
     return NextResponse.json({ error: `New password must be at least ${MIN_LEN} characters.` }, { status: 400 })
+  }
+  if (DEMO_MODE) {
+    return NextResponse.json({ success: true, message: 'Demo mode: password change skipped.' })
   }
 
   try {

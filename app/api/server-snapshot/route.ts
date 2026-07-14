@@ -9,6 +9,7 @@ import { Buffer } from 'node:buffer'
 import { NextRequest, NextResponse } from 'next/server'
 import { classifyPassword, tierForClass } from '@/lib/access-tier'
 import { clientIp, isLockedOut, recordFailure } from '@/lib/rate-limit'
+import { DEMO_MODE, demoFpsHistory, demoMetrics, demoPlayers } from '@/lib/demo-mode'
 import { PALWORLD_PROXY_HEADERS } from '@/lib/palworld'
 import { readFpsRing } from '@/lib/fps-ring'
 
@@ -43,6 +44,14 @@ export async function GET(request: NextRequest) {
   if (tier === 'invalid') {
     recordFailure(ip)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  if (DEMO_MODE) {
+    return NextResponse.json({
+      metrics: demoMetrics(),
+      players: { players: demoPlayers },
+      ...(tier === 'admin' ? { fpsHistory: demoFpsHistory() } : {}),
+    })
   }
 
   // Upstream target is PINNED server-side (same posture as the proxy route);

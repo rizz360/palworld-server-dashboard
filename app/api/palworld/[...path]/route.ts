@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer'
 import { NextRequest, NextResponse } from 'next/server'
 import { classifyPassword, tierForClass } from '@/lib/access-tier'
 import { clientIp, isLockedOut, recordFailure } from '@/lib/rate-limit'
+import { DEMO_MODE, demoPalworldResponse } from '@/lib/demo-mode'
 import { PALWORLD_PROXY_HEADERS } from '@/lib/palworld'
 import type { AccessTier } from '@/lib/types'
 
@@ -141,6 +142,27 @@ async function proxyPalworldRequest(request: NextRequest, { params }: RouteConte
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const { path } = await params
+
+  // MOD-tier enforcement: exact match of "<METHOD> <decoded path>" against the
+  // allowlist, checked before anything is forwarded upstream. Path segments
+  // arrive URL-decoded from Next, so traversal and encoded-slash tricks
+  // ("players/../shutdown", "players%2F..%2Fshutdown") produce keys that simply
+  // do not match and are rejected. Case-sensitive by design: fail closed on
+  // anything that is not an exact allowlisted endpoint.
+  const decodedPath = path.join('/')
+
+  if (tier === 'mod' && !MOD_TIER_ALLOWLIST.has(`${method} ${decodedPath}`)) {
+    return NextResponse.json(
+      { error: `Forbidden: "${method} /${decodedPath}" is not available to the mod tier` },
+      { status: 403 }
+    )
+  }
+
+  if (DEMO_MODE) {
+    return NextResponse.json(demoPalworldResponse(decodedPath, method, tier))
+  }
+
   const serverConfig = getServerConfig(tier)
 
   if (!serverConfig) {
@@ -154,23 +176,6 @@ async function proxyPalworldRequest(request: NextRequest, { params }: RouteConte
 
   if (!upstreamBaseUrl) {
     return NextResponse.json({ error: 'Invalid server host or REST API port' }, { status: 400 })
-  }
-
-  const { path } = await params
-
-  // MOD-tier enforcement: exact match of "<METHOD> <decoded path>" against the
-  // allowlist, checked before anything is forwarded upstream. Path segments
-  // arrive URL-decoded from Next, so traversal and encoded-slash tricks
-  // ("players/../shutdown", "players%2F..%2Fshutdown") produce keys that simply
-  // do not match and are rejected. Case-sensitive by design: fail closed on
-  // anything that is not an exact allowlisted endpoint.
-  const decodedPath = path.join('/')
-
-  if (serverConfig.tier === 'mod' && !MOD_TIER_ALLOWLIST.has(`${method} ${decodedPath}`)) {
-    return NextResponse.json(
-      { error: `Forbidden: "${method} /${decodedPath}" is not available to the mod tier` },
-      { status: 403 }
-    )
   }
 
   const upstreamPath = path.map((segment) => encodeURIComponent(segment)).join('/')

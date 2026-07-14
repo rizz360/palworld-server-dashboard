@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { classifyPassword, tierForClass } from '@/lib/access-tier'
 import { clientIp, isLockedOut, recordFailure } from '@/lib/rate-limit'
+import { DEMO_MODE, demoFpsHistory } from '@/lib/demo-mode'
 import { PALWORLD_PROXY_HEADERS } from '@/lib/palworld'
 import { readFpsRing } from '@/lib/fps-ring'
 
@@ -25,5 +26,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  return NextResponse.json(await readFpsRing())
+  return NextResponse.json(DEMO_MODE ? demoFpsHistory() : await readFpsRing())
 }

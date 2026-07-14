@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { writeFile, rename } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { classifyPassword, tierForClass } from '@/lib/access-tier'
+import { DEMO_MODE } from '@/lib/demo-mode'
 import { clientIp, isLockedOut, recordFailure } from '@/lib/rate-limit'
 import { PALWORLD_PROXY_HEADERS } from '@/lib/palworld'
 
@@ -63,6 +64,10 @@ export async function POST(request: NextRequest) {
     // empty/malformed body → defaults (a 30s restart)
   }
 
+  if (DEMO_MODE) {
+    return NextResponse.json({ success: true, waittime, dryRun: true })
+  }
+
   try {
     // temp-then-rename so the path-unit never observes a half-written request
     const tmp = `${REQUEST_PATH}.tmp`
@@ -80,6 +85,9 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const denied = adminGate(request)
   if (denied) return denied
+  if (DEMO_MODE) {
+    return NextResponse.json({ success: true })
+  }
   try {
     await writeFile(CANCEL_PATH, JSON.stringify({ cancelledAt: Date.now() }), { mode: 0o660 })
   } catch (error) {

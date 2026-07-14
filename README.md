@@ -10,7 +10,13 @@ Use it to monitor server health, view players, manage moderation actions, send a
 - **Documentation:** https://palworld-server-dashboard.vercel.app/docs
 - **Container image:** `ghcr.io/rnz01/palworld-server-dashboard:latest`
 
+## Demo
+
+The live demo uses mock Palworld REST API data, so you can click around without affecting a real server.
+
 ## Preview
+
+Sensitive data in the dashboard screenshot below has been blurred.
 
 ### Dashboard
 

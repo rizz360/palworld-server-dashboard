@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { classifyPassword } from '@/lib/access-tier'
+import { DEMO_MODE } from '@/lib/demo-mode'
 import { clientIp, isLockedOut, recordFailure } from '@/lib/rate-limit'
 import { PALWORLD_PROXY_HEADERS } from '@/lib/palworld'
 
@@ -30,6 +31,16 @@ export async function GET(request: NextRequest) {
   if (cls === 'unknown') recordFailure(ip)
   if (cls !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  if (DEMO_MODE) {
+    return NextResponse.json({
+      events: [
+        { type: 'join', ts: new Date(Date.now() - 600_000).toISOString(), name: 'LamballLarry' },
+        { type: 'chat', ts: new Date(Date.now() - 420_000).toISOString(), name: 'CattivaCore', text: 'Demo server online.' },
+        { type: 'chat', ts: new Date(Date.now() - 120_000).toISOString(), name: 'SparkitOps', text: 'Try announce, kick, ban, and restart safely.' },
+      ],
+    })
   }
 
   let out = ''

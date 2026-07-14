@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { DEMO_MODE } from '@/lib/demo-mode'
 import { PALWORLD_PROXY_HEADERS } from '@/lib/palworld'
 import { clientIp, isLockedOut, recordFailure } from '@/lib/rate-limit'
 import { verifyAdmin, setModPassword, isModEnabled } from '@/lib/panel-auth-store'
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     recordFailure(ip)
     return NextResponse.json({ error: 'Admin access required.' }, { status: 403 })
   }
-  return NextResponse.json({ modEnabled: isModEnabled() })
+  return NextResponse.json({ modEnabled: DEMO_MODE ? false : isModEnabled() })
 }
 
 // Set / change / disable the panel MOD login password. Authorized by the
@@ -56,6 +57,9 @@ export async function POST(request: NextRequest) {
 
   if (!disable && (modPassword === null || modPassword.length < MIN_LEN)) {
     return NextResponse.json({ error: `Mod password must be at least ${MIN_LEN} characters.` }, { status: 400 })
+  }
+  if (DEMO_MODE) {
+    return NextResponse.json({ success: true, modEnabled: !disable, message: 'Demo mode: mod access change skipped.' })
   }
 
   try {
