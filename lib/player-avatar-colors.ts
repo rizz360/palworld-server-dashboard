@@ -13,7 +13,7 @@ const AVATAR_COLOR_PALETTE = [
   '#d946ef',
 ] as const
 
-export const PLAYER_AVATAR_COLORS_STORAGE_KEY = 'player-avatar-colors'
+const PLAYER_AVATAR_COLORS_STORAGE_KEY = 'player-avatar-colors'
 
 function getRandomIndex(maxExclusive: number) {
   if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.getRandomValues === 'function') {
