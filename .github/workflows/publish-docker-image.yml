@@ -8,11 +8,20 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            suffix: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: arm64
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -20,9 +29,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -34,28 +40,54 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-            type=sha,format=short
-          labels: |
-            org.opencontainers.image.title=Palworld Server Dashboard
-            org.opencontainers.image.description=Browser-based admin dashboard for managing and monitoring Palworld dedicated servers through the REST API.
-            org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+      - name: Prepare tags
+        id: prep
+        run: |
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          short_sha="${GITHUB_SHA::7}"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "tags=${image}:latest-${{ matrix.suffix }},${image}:sha-${short_sha}-${{ matrix.suffix }}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.prep.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=Palworld Server Dashboard
+            org.opencontainers.image.description=Browser-based admin dashboard for managing and monitoring Palworld dedicated servers through the REST API.
+            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.suffix }}
+
+  publish-manifest:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish multi-arch tags
+        run: |
+          image="${REGISTRY}/${GITHUB_REPOSITORY,,}"
+          short_sha="${GITHUB_SHA::7}"
+          docker buildx imagetools create \
+            --tag "${image}:latest" \
+            --tag "${image}:sha-${short_sha}" \
+            "${image}:sha-${short_sha}-amd64" \
+            "${image}:sha-${short_sha}-arm64"
