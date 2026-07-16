@@ -121,12 +121,6 @@ The docs cover installation, configuration, authentication, moderator access, de
 
 https://palworld-server-dashboard.vercel.app/docs
 
-## Contributors
-
-<a href="https://github.com/SSCBryce" title="SSCBryce">
-  <img src="https://github.com/SSCBryce.png?size=80" width="80" height="80" alt="SSCBryce" />
-</a>
-
 ## License
 
 MIT. See [LICENSE](./LICENSE).
