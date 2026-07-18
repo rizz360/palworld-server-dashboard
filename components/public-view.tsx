@@ -9,24 +9,9 @@ import { EyeIcon, MapPinnedIcon, UsersIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { LiveMap } from '@/components/live-map'
-import type { Player } from '@/lib/types'
+import type { Player, PublicSnapshot } from '@/lib/types'
 
 const POLL_INTERVAL_MS = 10_000
-
-interface PublicSnapshot {
-  info: { servername: string; description: string; version: string }
-  metrics: {
-    serverfps: number
-    currentplayernum: number
-    maxplayernum: number
-    serverframetime: number
-    uptime: number
-    days: number
-    basecampnum: number
-  }
-  players: Array<{ name: string; level: number; location_x: number; location_y: number }>
-  generatedAt: number
-}
 
 type ViewPhase = 'loading' | 'ready' | 'disabled' | 'unreachable'
 
@@ -44,11 +29,14 @@ function formatUptime(totalSeconds: number): string {
 
 // The map component consumes the full Player shape; the public payload only
 // carries the four public fields, so the sensitive ones are simply empty.
+// playerId gets a synthetic value: the map keys markers by userId/playerId/name
+// (getPlayerKey), and character names are NOT unique in Palworld — two players
+// with the same name would otherwise collide on React keys.
 function toMapPlayers(snapshot: PublicSnapshot): Player[] {
-  return snapshot.players.map((player) => ({
+  return snapshot.players.map((player, index) => ({
     name: player.name,
     accountName: '',
-    playerId: '',
+    playerId: `public-${index}`,
     userId: '',
     ip: '',
     ping: 0,

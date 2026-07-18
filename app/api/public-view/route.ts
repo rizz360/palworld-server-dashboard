@@ -24,31 +24,10 @@ import { Buffer } from 'node:buffer'
 import { NextResponse } from 'next/server'
 import { DEMO_MODE, demoMetrics, demoPlayers, demoServerInfo } from '@/lib/demo-mode'
 import { normalizePlayersPayload } from '@/lib/palworld'
+import type { PublicPlayer, PublicSnapshot } from '@/lib/types'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-interface PublicPlayer {
-  name: string
-  level: number
-  location_x: number
-  location_y: number
-}
-
-interface PublicSnapshot {
-  info: { servername: string; description: string; version: string }
-  metrics: {
-    serverfps: number
-    currentplayernum: number
-    maxplayernum: number
-    serverframetime: number
-    uptime: number
-    days: number
-    basecampnum: number
-  }
-  players: PublicPlayer[]
-  generatedAt: number
-}
 
 function isEnabled(): boolean {
   const flag = process.env.PUBLIC_VIEW_ENABLED
@@ -94,6 +73,11 @@ function toPublicMetrics(payload: unknown): PublicSnapshot['metrics'] {
   }
 }
 
+// Hard timeout: with single-flight, one hung upstream response would otherwise
+// pin `inFlight` and stall EVERY public request until undici's own timeouts
+// (minutes). Aborting keeps the negative cache in charge of a wedged server.
+const UPSTREAM_TIMEOUT_MS = 10_000
+
 async function fetchUpstream(baseUrl: URL, endpoint: string, password: string) {
   const response = await fetch(new URL(`/v1/api/${endpoint}`, baseUrl), {
     headers: {
@@ -101,6 +85,7 @@ async function fetchUpstream(baseUrl: URL, endpoint: string, password: string) {
       Authorization: `Basic ${Buffer.from(`admin:${password}`).toString('base64')}`,
     },
     cache: 'no-store',
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
   })
 
   if (!response.ok) {
@@ -140,11 +125,13 @@ let cachedSnapshot: { payload: PublicSnapshot; expiresAt: number } | null = null
 let errorHoldUntil = 0
 let inFlight: Promise<PublicSnapshot> | null = null
 
-function snapshotResponse(payload: PublicSnapshot, ttlMs: number) {
+function snapshotResponse(payload: PublicSnapshot, maxAgeMs: number) {
   return NextResponse.json(payload, {
     headers: {
-      // Lets a fronting reverse proxy/CDN absorb public load for one TTL.
-      'Cache-Control': `public, max-age=${Math.floor(ttlMs / 1000)}`,
+      // Lets a fronting reverse proxy/CDN absorb public load. max-age is the
+      // snapshot's REMAINING lifetime, not the full TTL — otherwise a CDN
+      // hitting near expiry would serve data up to ~2x TTL old.
+      'Cache-Control': `public, max-age=${Math.max(1, Math.ceil(maxAgeMs / 1000))}`,
     },
   })
 }
@@ -167,7 +154,7 @@ export async function GET() {
   const ttlMs = cacheTtlMs()
 
   if (cachedSnapshot && cachedSnapshot.expiresAt > now) {
-    return snapshotResponse(cachedSnapshot.payload, ttlMs)
+    return snapshotResponse(cachedSnapshot.payload, cachedSnapshot.expiresAt - now)
   }
 
   if (errorHoldUntil > now && !inFlight) {
