@@ -4,5 +4,6 @@ export default {
   'server-operations': 'Server Operations',
   monitoring: 'Monitoring',
   'live-map': 'Live Map',
+  'public-view': 'Public Read-Only View',
   themes: 'Themes'
 }

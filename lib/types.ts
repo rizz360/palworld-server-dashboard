@@ -40,6 +40,23 @@ export interface ServerMetrics {
   basecampnum: number
 }
 
+// Sanitized payload served by the unauthenticated /api/public-view route and
+// consumed by the /view page. Shared so the two sides cannot drift apart —
+// only the fields named here ever go public (no worldguid, IPs, IDs, or ping).
+export interface PublicPlayer {
+  name: string
+  level: number
+  location_x: number
+  location_y: number
+}
+
+export interface PublicSnapshot {
+  info: Pick<ServerInfo, 'servername' | 'description' | 'version'>
+  metrics: ServerMetrics
+  players: PublicPlayer[]
+  generatedAt: number
+}
+
 export interface FpsSample {
   timestamp: number
   fps: number

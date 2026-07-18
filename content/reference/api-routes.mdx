@@ -17,10 +17,13 @@ The dashboard uses internal Next.js API routes. These are implementation details
 | `/api/panel-auth/admin-password` | Admin password management endpoint. |
 | `/api/panel-auth/mod-password` | Moderator password management endpoint. |
 | `/api/demo-mode` | Reports whether runtime demo mode is enabled. |
+| `/api/public-view` | Unauthenticated, allowlist-sanitized snapshot for the optional public `/view` page. 404 unless `PUBLIC_VIEW_ENABLED=true`. |
 
 ## Authentication
 
 Protected routes expect the panel password in the internal dashboard header, not in query strings.
+
+`/api/public-view` is the deliberate exception: it is opt-in, read-only, accepts no client input, and serves only an allowlisted payload (no IPs, IDs, ping, settings, or history). See [Public Read-Only View](/docs/features/public-view).
 
 ## Mod tier enforcement
 
