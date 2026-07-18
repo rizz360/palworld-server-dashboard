@@ -1,0 +1,55 @@
+---
+title: Public Read-Only View
+---
+
+# Public Read-Only View
+
+`/view` is an optional, view-only status page intended to be safe to expose publicly: server metrics, the live map, and the online player list. It has no login and no controls — nothing on it can change the server.
+
+It is **disabled by default**. Enable it with:
+
+```env
+PUBLIC_VIEW_ENABLED=true
+```
+
+## What it shows
+
+- Server name, description, and version
+- Metrics: player count, server FPS, frame time, in-game day, uptime, base camps
+- Live map with player position markers
+- Online players with name and level
+
+## What it never exposes
+
+The page is fed exclusively by `GET /api/public-view`, which rebuilds its response from an explicit allowlist. The following never enter the public payload:
+
+- player IP addresses
+- Steam IDs / user IDs / player UIDs / account names
+- player ping
+- the world GUID
+- server settings
+- FPS history
+- panel or game passwords (the route accepts no credentials at all)
+
+The route also reads no client input — no query parameters, headers, or body — so callers cannot influence what is fetched upstream.
+
+## Load protection
+
+Public traffic is decoupled from the game server: the snapshot is cached server-side for `PUBLIC_VIEW_CACHE_SECONDS` (default 10, clamped 5–60) and concurrent cache misses share a single upstream request. Any number of public viewers costs at most about one REST read per cache window. The response carries a matching `Cache-Control: public, max-age` header, so a fronting reverse proxy or CDN can absorb the load entirely.
+
+## Privacy considerations
+
+Player names, levels, and live positions **are** visible to anyone who can reach the page. On servers where that is sensitive, leave the feature disabled or restrict the page at your reverse proxy.
+
+## Exposing only the public page
+
+The rest of the dashboard remains an admin tool and should stay protected as described in the [security guide](/docs/security). If you want to publish only the status page, allow just these paths through your reverse proxy:
+
+```text
+/view
+/api/public-view
+/_next/*          (page assets)
+/palworld-map/*   (map tiles and marker icons)
+```
+
+and keep `/`, `/api/palworld/*`, and everything else restricted to trusted operators.

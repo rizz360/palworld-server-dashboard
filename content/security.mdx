@@ -48,6 +48,12 @@ Avoid:
 Public internet → dashboard with only panel password → Palworld REST API
 ```
 
+## Public read-only view
+
+The optional `/view` page is the one surface designed for public exposure. It is disabled by default (`PUBLIC_VIEW_ENABLED`), requires no credentials, performs no actions, and serves only an allowlisted snapshot: metrics plus player name, level, and map position — never IPs, Steam/user IDs, ping, settings, or passwords. Its snapshot is cached server-side, so public traffic cannot load the game server.
+
+If you publish it, expose only `/view` and `/api/public-view` (plus static assets) at your reverse proxy and keep every other route restricted. Remember that player names and live positions become public — see [Public Read-Only View](/docs/features/public-view).
+
 ## Browser storage
 
 If remember-me is enabled, the browser stores panel login data locally. This is convenient but means anyone with access to that browser profile may be able to use the dashboard.

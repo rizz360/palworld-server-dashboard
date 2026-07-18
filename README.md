@@ -39,6 +39,7 @@ Sensitive data in the dashboard screenshot below has been blurred.
 - Online player roster with kick, ban, and unban actions
 - Admin announcements and common server-operation controls
 - Live map with player positions and optional map markers
+- Optional public read-only status page (`/view`) with metrics, live map, and player list
 - Admin and limited moderator access tiers
 - Docker Compose deployment with FPS sampler sidecar
 - Built-in documentation powered by Nextra
@@ -105,9 +106,21 @@ npm run typecheck  # route typegen + TypeScript check
 npm run check      # typecheck + build
 ```
 
+## Public Read-Only View (optional)
+
+`/view` is a view-only status page designed to be safe to share: server metrics, the live map, and online players (name and level only). It is **disabled by default** — enable it with:
+
+```env
+PUBLIC_VIEW_ENABLED=true
+```
+
+It requires no password and grants none: its only data source is `GET /api/public-view`, which serves an allowlisted snapshot (no player IPs, no Steam/user IDs, no ping, no world GUID, no settings) and never accepts client input. Responses are cached server-side (`PUBLIC_VIEW_CACHE_SECONDS`, default 10s), so public traffic cannot put load on the game server.
+
+Player names and live positions are visible to anyone who can reach the page — enable it only if that is acceptable for your community. The admin panel itself remains protected as before; if you expose only `/view` through your reverse proxy, keep `/`, `/api/palworld`, and the other panel routes restricted.
+
 ## Security Notice
 
-This is an admin tool for a game server. Do not expose it publicly without additional protection such as VPN, reverse-proxy authentication, SSO, or IP allowlisting.
+This is an admin tool for a game server. Do not expose it publicly without additional protection such as VPN, reverse-proxy authentication, SSO, or IP allowlisting. The optional `/view` page (above) is the only surface designed for public exposure.
 
 The browser logs in with a panel password. The real Palworld REST admin password is kept server-side and injected only by the dashboard proxy.
 
