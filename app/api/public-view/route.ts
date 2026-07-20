@@ -161,7 +161,7 @@ function snapshotResponse(payload: PublicSnapshot, maxAgeMs: number) {
 
 export async function GET() {
   if (!isEnabled()) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    return NextResponse.json({ error: 'Not found' }, { status: 404, headers: { 'Cache-Control': 'no-store' } })
   }
 
   if (DEMO_MODE) {
