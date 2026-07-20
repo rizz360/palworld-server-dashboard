@@ -102,13 +102,41 @@ function toScreenPixels(position: [number, number], width: number, height: numbe
 
 type LiveMapView = 'dashboard' | 'map'
 
+// External data source for the public read-only /view page: the parent owns the
+// players and the refresh, so the map never builds panel-auth proxy requests.
+export interface LiveMapSource {
+  players: Player[]
+  statusLabel: string
+  onRefresh: () => Promise<void>
+  refreshIntervalMs?: number
+}
+
 interface LiveMapProps {
   activeTab?: LiveMapView
   onTabChange?: (tab: LiveMapView) => void
+  source?: LiveMapSource
 }
 
-export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
-  const { config, connectionStatus, players, setPlayers } = useServer()
+export function LiveMap({ activeTab = 'map', onTabChange, source }: LiveMapProps) {
+  let server: ReturnType<typeof useServer> | null = null
+  try {
+    server = useServer()
+  } catch {
+    server = null
+  }
+
+  if (!server && !source) {
+    throw new Error('LiveMap must be used within a ServerProvider unless `source` is provided')
+  }
+
+  const config = server?.config ?? null
+  const connectionStatus = server?.connectionStatus ?? 'disconnected'
+  const contextPlayers = server?.players ?? []
+  const setPlayers = server?.setPlayers ?? ((_nextPlayers: Player[]) => {})
+  const players = source?.players ?? contextPlayers
+  const statusLabel = source?.statusLabel ?? connectionStatus
+  const refreshIntervalMs = source?.refreshIntervalMs ?? REFRESH_INTERVAL_MS
+  const canRefresh = !!source || !!config
   // gmaps-style view: top-left-origin transform, cursor-anchored wheel zoom, edge-clamped pan (owner spec 2026-07-10)
   const [view, setView] = useState<{ scale: number; tx: number; ty: number } | null>(null)
   const [mousePosition, setMousePosition] = useState<[string, string]>(['0.00', '0.00'])
@@ -141,7 +169,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
   const [useMapImageFallback, setUseMapImageFallback] = useState(false)
   const mapImageSrc = useMapImageFallback && mapImageFallbackUrl ? mapImageFallbackUrl : mapImageUrl
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [refreshCountdownMs, setRefreshCountdownMs] = useState(REFRESH_INTERVAL_MS)
+  const [refreshCountdownMs, setRefreshCountdownMs] = useState(refreshIntervalMs)
   const [mapImageLoaded, setMapImageLoaded] = useState(false)
   const [mapImageError, setMapImageError] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -270,7 +298,13 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
     [activeBounds]
   )
 
+  const sourceRefresh = source?.onRefresh
   const refreshPlayers = useCallback(async () => {
+    if (sourceRefresh) {
+      await sourceRefresh()
+      return
+    }
+
     if (!config) {
       return
     }
@@ -290,7 +324,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
 
     const payload = await response.json()
     setPlayers(normalizePlayersPayload(payload))
-  }, [config, setPlayers])
+  }, [sourceRefresh, config, setPlayers])
 
   const refreshMap = useCallback(async () => {
     setIsRefreshing(true)
@@ -336,15 +370,15 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
   }, [])
 
   useEffect(() => {
-    if (!config || !isPageVisible) {
+    if (!canRefresh || !isPageVisible) {
       nextAutoRefreshAtRef.current = null
-      setRefreshCountdownMs(REFRESH_INTERVAL_MS)
+      setRefreshCountdownMs(refreshIntervalMs)
       return
     }
 
     const scheduleNextRefresh = () => {
-      nextAutoRefreshAtRef.current = Date.now() + REFRESH_INTERVAL_MS
-      setRefreshCountdownMs(REFRESH_INTERVAL_MS)
+      nextAutoRefreshAtRef.current = Date.now() + refreshIntervalMs
+      setRefreshCountdownMs(refreshIntervalMs)
     }
 
     scheduleNextRefresh()
@@ -353,7 +387,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
     const interval = window.setInterval(() => {
       scheduleNextRefresh()
       void refreshMap()
-    }, REFRESH_INTERVAL_MS)
+    }, refreshIntervalMs)
 
     const countdownInterval = window.setInterval(() => {
       if (!nextAutoRefreshAtRef.current) {
@@ -367,7 +401,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
       window.clearInterval(interval)
       window.clearInterval(countdownInterval)
     }
-  }, [config, isPageVisible, refreshMap])
+  }, [canRefresh, isPageVisible, refreshMap, refreshIntervalMs])
 
   useEffect(() => {
     if (!isDragging) {
@@ -530,7 +564,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
   }, [mappablePlayers, zoom, fitScale, activeBounds])
 
   const refreshLabel = useMemo(() => {
-    if (!config) {
+    if (!canRefresh) {
       return 'Refresh: --'
     }
 
@@ -539,7 +573,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
     }
 
     return `Refresh: ${Math.max(0, Math.ceil(refreshCountdownMs / 1000))}s`
-  }, [config, isPageVisible, refreshCountdownMs])
+  }, [canRefresh, isPageVisible, refreshCountdownMs])
 
   return (
     <div className="flex h-full w-full flex-col bg-background text-foreground">
@@ -636,7 +670,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
 
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="secondary" className="border border-border/60 bg-muted/40 text-foreground hover:bg-muted/50">
-            {connectionStatus}
+            {statusLabel}
           </Badge>
           <Badge variant="secondary" className="border border-border/60 bg-muted/40 text-foreground hover:bg-muted/50">
             Players: {players.length}
@@ -646,7 +680,7 @@ export function LiveMap({ activeTab = 'map', onTabChange }: LiveMapProps) {
             variant="outline"
             className="border-border/70 bg-background/40 text-foreground hover:bg-muted/60 hover:text-foreground"
             onClick={() => void refreshMap()}
-            disabled={isRefreshing || !config}
+            disabled={isRefreshing || !canRefresh}
           >
             <RefreshCwIcon className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
