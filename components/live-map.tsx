@@ -118,11 +118,25 @@ interface LiveMapProps {
 }
 
 export function LiveMap({ activeTab = 'map', onTabChange, source }: LiveMapProps) {
-  const { config, connectionStatus, players: contextPlayers, setPlayers } = useServer()
+  let server: ReturnType<typeof useServer> | null = null
+  try {
+    server = useServer()
+  } catch {
+    server = null
+  }
+
+  if (!server && !source) {
+    throw new Error('LiveMap must be used within a ServerProvider unless `source` is provided')
+  }
+
+  const config = server?.config ?? null
+  const connectionStatus = server?.connectionStatus ?? 'disconnected'
+  const contextPlayers = server?.players ?? []
+  const setPlayers = server?.setPlayers ?? ((_nextPlayers: Player[]) => {})
   const players = source?.players ?? contextPlayers
   const statusLabel = source?.statusLabel ?? connectionStatus
   const refreshIntervalMs = source?.refreshIntervalMs ?? REFRESH_INTERVAL_MS
-  const canRefresh = source ? true : !!config
+  const canRefresh = !!source || !!config
   // gmaps-style view: top-left-origin transform, cursor-anchored wheel zoom, edge-clamped pan (owner spec 2026-07-10)
   const [view, setView] = useState<{ scale: number; tx: number; ty: number } | null>(null)
   const [mousePosition, setMousePosition] = useState<[string, string]>(['0.00', '0.00'])
