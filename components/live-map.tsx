@@ -60,10 +60,6 @@ function getFanoutOffset(index: number, count: number, scale: number) {
 }
 
 function toMapPosition([worldX, worldY]: [number, number], bounds: MapBounds): [number, number] {
-  if (worldX >= -256 && worldX <= 256) {
-    return [worldX, worldY]
-  }
-
   const x = -256 + (256 * (worldX - bounds[2])) / (bounds[0] - bounds[2])
   const y = (256 * (worldY - bounds[3])) / (bounds[1] - bounds[3])
 
